@@ -1,0 +1,688 @@
+---
+title: "Mapping RNA on genome"
+author: "Nastassia Gobet"
+date: "27 June 2019 - 21 August 2019"
+output:
+  html_document:
+    code_folding: hide
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    df_print: paged
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, fig.path="Graphs/", warning=TRUE)
+
+#load needed libraries
+library(knitr)
+##library(kableExtra)
+##library(rmarkdown)
+##library(reshape)
+##library(vioplot)
+
+# set working directory
+##setwd("F:/BXD/analyses/Comparison_mapping_B6vsD2/OnGenome")
+```
+
+
+# Data
+
+Loading data
+
+```{r}
+# load data
+
+# test parameters
+Testpar <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenome/MappingStatisticsTEST_LB61nsd_onD2.tsv", header=FALSE, stringsAsFactors=FALSE)
+
+# load stats for parental and F1 samples
+B6mm10 <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenome/MappingStatisticsB6mm10_B6D2F1.tsv", header=TRUE, stringsAsFactors=FALSE, row.names="Sample_Name")
+D2 <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenome/MappingStatisticsD2_B6D2F1.tsv", header=TRUE, stringsAsFactors=FALSE, row.names="Sample_Name")
+
+# load stats for all samples
+B6mm10all <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenome/MappingStatisticsB6mm10.tsv", header=TRUE, stringsAsFactors=FALSE, row.names="Sample_Name")
+D2all <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenome/MappingStatisticsD2.tsv", header=TRUE, stringsAsFactors=FALSE, row.names="Sample_Name")
+
+
+# test chromosomes and scaffolds to include
+B6mm10primaryassembly <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenome/MappingStatisticsB6mm10primaryassembly_B6D2.tsv", header=TRUE, stringsAsFactors=FALSE, row.names="Sample_Name")
+B6mm10primaryassemblynoscaffolds <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenome/MappingStatisticsB6mm10primaryassemblynoscaffolds_B6D2.tsv", header=TRUE, stringsAsFactors=FALSE, row.names="Sample_Name")
+B6mm10majorchromosomes <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenome/MappingStatisticsB6mm10majorchromosomes_B6D2.tsv", header=TRUE, stringsAsFactors=FALSE, row.names="Sample_Name")
+D2majorchromosomes <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenome/MappingStatisticsD2majorchromosomes_B6D2.tsv", header=TRUE, stringsAsFactors=FALSE, row.names="Sample_Name")
+
+# load SraTable (for GSM to condition/line/tissue conversion)
+sratable <- read.table("F:/BXD/data/transcriptome/RNAseq/SraRunTable.txt", sep="\t", header=TRUE, stringsAsFactors=FALSE)
+##sratable[, c("Sample_Name", "condition", "genotype", "tissue")]
+uniqSratmp <- unique(sratable[, c("Sample_Name", "condition", "genotype", "tissue")])
+# display table with information on samples
+##kable(uniqSra)
+# load table to convert mouse lines names
+MouseLines <- read.table("F:/BXD/data/ConvertLineNames.tsv", sep="\t", header=FALSE, stringsAsFactors=FALSE)
+
+# clean mouse lines names in sra table
+uniqSra <- uniqSratmp
+rownames(uniqSra) <- 1:nrow(uniqSra)
+uniqSra$genotype <- MouseLines$V1[match(uniqSratmp$genotype,MouseLines$V2)]
+rm(uniqSratmp, MouseLines)
+```
+
+
+# Testing parameters
+
+Just an idea about how the different parameters individually affect the uniquely mapped percentage.
+TESTfree is the default parameters of STAR.
+
+```{r}
+# plot impact of different parameters tested individually.
+par(mar=c(8.1,4.1,2.1,2.1))
+xcor <- barplot(Testpar$V2[5:14], axisnames=FALSE, las=2, ylab="Uniquely mapped reads %", ylim=c(0,85), col=c("white","grey90","grey80", "grey70","black", "darkred","blue", "darkblue", "skyblue", "forestgreen"))
+# add values above bars
+text(x=xcor, y=Testpar$V2[5:14], label=Testpar$V2[5:14], pos=3, cex=0.9, col="grey")
+#xlab
+text(xcor, par("usr")[3], labels=Testpar$V1[5:14], srt=50, adj=c(1.1,1.1), xpd=TRUE, cex=0.9)
+
+# estimate uniquely mapped percentage if cumulative restriction (additive)
+sum(Testpar$V2[9]-Testpar$V2[c(5,10,11,14)])
+```
+
+
+# Unique percentage values {.tabset}
+
+## on B6 mm10
+
+```{r}
+# display values B6 mm10
+kable(B6mm10all)
+```
+
+## on D2
+
+```{r}
+# display values D2
+kable(D2all)
+```
+
+## only parental and F1 samples {.tabset}
+
+### on B6 mm10
+
+```{r}
+# display values B6 mm10
+kable(B6mm10)
+```
+
+### on D2
+
+```{r}
+# display values D2
+kable(D2)
+```
+
+# Analysis
+
+## Parental samples
+
+0 mismatch allowed
+
+```{r}
+# get parental samples indexes
+CB6samples_idx <- intersect(grep("B6[12]", rownames(D2)), grep("L", rownames(D2), invert=TRUE))
+CDBsamples_idx <- intersect(grep("DB[12]", rownames(D2)), grep("L", rownames(D2), invert=TRUE))
+LB6samples_idx <- intersect(grep("B6[12]", rownames(D2)), grep("L", rownames(D2)))
+LDBsamples_idx <- intersect(grep("DB[12]", rownames(D2)), grep("L", rownames(D2)))
+
+# Difference in mappability by reference for uniquely exactly mapped reads
+par(mfrow=c(1,2))
+
+# in cortex
+plot("", las=2, xlim=c(1,2), ylim=c(46,57), bty="l", xaxt="n", main="Cortex", xlab="Reference", ylab="Uniquely exactly mapped reads (%)")
+axis(1, at=1:2, labels=c("B6mm10","D2"))
+segments(x0=rep(2,8), y0=D2[c(CB6samples_idx,CDBsamples_idx),"Uniq0"], x1=rep(1,8), y1=B6mm10[c(CB6samples_idx,CDBsamples_idx),"Uniq0"],
+         col=c(rep("grey90",4),rep("wheat",4)), lty = par("lty"), lwd = par("lwd"))
+points(rep(1,8),B6mm10[c(CB6samples_idx,CDBsamples_idx),"Uniq0"], pch=19, cex=1, col=c(rep("grey20",4),rep("tan",4)))
+points(rep(2,8),D2[c(CB6samples_idx,CDBsamples_idx),"Uniq0"], pch=19, cex=1, col=c(rep("grey20",4),rep("tan",4)))
+legend("bottom", title="Samples", legend=c("B6","D2"), pch=19, col=c("grey20","tan"), horiz=TRUE)
+
+# in liver
+plot("", las=2, xlim=c(1,2), ylim=c(27,41), bty="l", xaxt="n", main="Liver", xlab="Reference", ylab="Uniquely exactly mapped reads (%)")
+axis(1, at=1:2, labels=c("B6mm10","D2"))
+segments(x0=rep(2,8), y0=D2[c(LB6samples_idx,LDBsamples_idx),"Uniq0"], x1=rep(1,8), y1=B6mm10[c(LB6samples_idx,LDBsamples_idx),"Uniq0"],
+         col=c(rep("grey90",4),rep("wheat",4)), lty=par("lty"), lwd=1)
+points(rep(1,8),B6mm10[c(LB6samples_idx,LDBsamples_idx),"Uniq0"], pch=19, cex=1, col=c(rep("grey20",4),rep("tan",4)))
+points(rep(2,8),D2[c(LB6samples_idx,LDBsamples_idx),"Uniq0"], pch=19, cex=1, col=c(rep("grey20",4),rep("tan",4)))
+legend("bottom", title="Samples", legend=c("B6","D2"), pch=19, col=c("grey20","tan"), horiz=TRUE)
+```
+
+Observations:
+
+* In cortex, B6 samples map better on B6 reference, and D2 samples map better on D2.
+* In liver, B6 samples still map better on B6 reference than on D2 reference, but D2 samples seem to map more similarly to both genomes.
+
+
+## Parental and F1 samples {.tabset}
+
+### 0
+
+```{r}
+# exactly matching
+plot(B6mm10$Uniq0, pch=19, col="black", ylim=c(29,77), las=2, xaxt="n", ylab="Uniquely mapped percentage", xlab="Samples", main="0 mismatch allowed")
+points(D2$Uniq0, pch=19, col="tan")
+abline(v=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5))
+axis(1, at=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5), labels=rep(c(""),7))
+axis(1, at=c(c(2.5,5.5,8.5,11.5),12+c(2.5,5.5,8.5,11.5)), tick=FALSE, labels=rep(c("B6","BxD","D2","DxB"),2))
+for(myline in seq(0.5,2,0.5)){
+  axis(1, at=12.5, line=myline, labels=c(""))
+}
+axis(1, at=c(6.5,18.5), line=1, tick=FALSE, labels=c("cortex", "liver"))
+legend("bottomleft", title="Reference", legend=c("B6mm10","D2"), fill=c("black","tan"))
+```
+
+Observations:
+
+* About 15% of difference in mappability between cortex and liver (liver lower). The variability seems globally similar.
+* B6 and D2 samples behave as expected (B6 samples maps higher on B6 reference, D2 samples maps higher on D2 reference), though the difference is very low for liver D2 samples mapped on D2.
+* F1 samples map higher on B6 than on D2.
+
+
+### 1
+
+```{r}
+# 1 mismatch allowed
+plot(B6mm10$Uniq1, pch=19, col="black", ylim=c(29,77), las=2, xaxt="n", ylab="Uniquely mapped percentage", xlab="Samples", main="1 mismatch allowed")
+points(D2$Uniq1, pch=19, col="tan")
+abline(v=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5))
+axis(1, at=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5), labels=rep(c(""),7))
+axis(1, at=c(c(2.5,5.5,8.5,11.5),12+c(2.5,5.5,8.5,11.5)), tick=FALSE, labels=rep(c("B6","BxD","D2","DxB"),2))
+for(myline in seq(0.5,2,0.5)){
+  axis(1, at=12.5, line=myline, labels=c(""))
+}
+axis(1, at=c(6.5,18.5), line=1, tick=FALSE, labels=c("cortex", "liver"))
+legend("bottomleft", title="Reference", legend=c("B6mm10","D2"), fill=c("black","tan"))
+
+```
+
+
+### 2
+
+```{r}
+# 2 mismatches allowed
+plot(B6mm10$Uniq2, pch=19, col="black", ylim=c(29,77), las=2, xaxt="n", ylab="Uniquely mapped percentage", xlab="Samples", main="2 mismatches allowed")
+points(D2$Uniq2, pch=19, col="tan")
+abline(v=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5))
+axis(1, at=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5), labels=rep(c(""),7))
+axis(1, at=c(c(2.5,5.5,8.5,11.5),12+c(2.5,5.5,8.5,11.5)), tick=FALSE, labels=rep(c("B6","BxD","D2","DxB"),2))
+for(myline in seq(0.5,2,0.5)){
+  axis(1, at=12.5, line=myline, labels=c(""))
+}
+axis(1, at=c(6.5,18.5), line=1, tick=FALSE, labels=c("cortex", "liver"))
+legend("bottomleft", title="Reference", legend=c("B6mm10","D2"), fill=c("black","tan"))
+
+```
+
+### 3
+
+```{r}
+# 3 mismatches allowed
+plot(B6mm10$Uniq3, pch=19, col="black", ylim=c(29,77), las=2, xaxt="n", ylab="Uniquely mapped percentage", xlab="Samples", main="3 mismatches allowed")
+points(D2$Uniq3, pch=19, col="tan")
+abline(v=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5))
+axis(1, at=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5), labels=rep(c(""),7))
+axis(1, at=c(c(2.5,5.5,8.5,11.5),12+c(2.5,5.5,8.5,11.5)), tick=FALSE, labels=rep(c("B6","BxD","D2","DxB"),2))
+for(myline in seq(0.5,2,0.5)){
+  axis(1, at=12.5, line=myline, labels=c(""))
+}
+axis(1, at=c(6.5,18.5), line=1, tick=FALSE, labels=c("cortex", "liver"))
+legend("bottomleft", title="Reference", legend=c("B6mm10","D2"), fill=c("black","tan"))
+
+```
+
+With 2 or 3 mismatches allowed, the F1 samples seem to map more similarly to both references.
+
+### 4
+
+```{r}
+# 4 mismatches allowed
+plot(B6mm10$Uniq4, pch=19, col="black", ylim=c(29,77), las=2, xaxt="n", ylab="Uniquely mapped percentage", xlab="Samples", main="4 mismatches allowed")
+points(D2$Uniq4, pch=19, col="tan")
+abline(v=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5))
+axis(1, at=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5), labels=rep(c(""),7))
+axis(1, at=c(c(2.5,5.5,8.5,11.5),12+c(2.5,5.5,8.5,11.5)), tick=FALSE, labels=rep(c("B6","BxD","D2","DxB"),2))
+for(myline in seq(0.5,2,0.5)){
+  axis(1, at=12.5, line=myline, labels=c(""))
+}
+axis(1, at=c(6.5,18.5), line=1, tick=FALSE, labels=c("cortex", "liver"))
+legend("bottomleft", title="Reference", legend=c("B6mm10","D2"), fill=c("black","tan"))
+
+```
+
+### 5
+
+```{r}
+# 5 mismatches allowed
+plot(B6mm10$Uniq5, pch=19, col="black", ylim=c(29,77), las=2, xaxt="n", ylab="Uniquely mapped percentage", xlab="Samples", main="5 mismatches allowed")
+points(D2$Uniq5, pch=19, col="tan")
+abline(v=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5))
+axis(1, at=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5), labels=rep(c(""),7))
+axis(1, at=c(c(2.5,5.5,8.5,11.5),12+c(2.5,5.5,8.5,11.5)), tick=FALSE, labels=rep(c("B6","BxD","D2","DxB"),2))
+for(myline in seq(0.5,2,0.5)){
+  axis(1, at=12.5, line=myline, labels=c(""))
+}
+axis(1, at=c(6.5,18.5), line=1, tick=FALSE, labels=c("cortex", "liver"))
+legend("bottomleft", title="Reference", legend=c("B6mm10","D2"), fill=c("black","tan"))
+
+```
+
+### 6
+
+```{r}
+# 6 mismatches allowed
+plot(B6mm10$Uniq6, pch=19, col="black", ylim=c(29,77), las=2, xaxt="n", ylab="Uniquely mapped percentage", xlab="Samples", main="6 mismatches allowed")
+points(D2$Uniq6, pch=19, col="tan")
+abline(v=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5))
+axis(1, at=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5), labels=rep(c(""),7))
+axis(1, at=c(c(2.5,5.5,8.5,11.5),12+c(2.5,5.5,8.5,11.5)), tick=FALSE, labels=rep(c("B6","BxD","D2","DxB"),2))
+for(myline in seq(0.5,2,0.5)){
+  axis(1, at=12.5, line=myline, labels=c(""))
+}
+axis(1, at=c(6.5,18.5), line=1, tick=FALSE, labels=c("cortex", "liver"))
+legend("bottomleft", title="Reference", legend=c("B6mm10","D2"), fill=c("black","tan"))
+
+```
+
+At 6 mismatches allowed, all these samples seem to map better on D2 reference.
+
+### 10
+
+```{r}
+# 10 mismatches allowed
+plot(B6mm10$Uniq10, pch=19, col="black", ylim=c(29,77), las=2, xaxt="n", ylab="Uniquely mapped percentage", xlab="Samples", main="10 mismatches allowed")
+points(D2$Uniq10, pch=19, col="tan")
+abline(v=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5))
+axis(1, at=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5), labels=rep(c(""),7))
+axis(1, at=c(c(2.5,5.5,8.5,11.5),12+c(2.5,5.5,8.5,11.5)), tick=FALSE, labels=rep(c("B6","BxD","D2","DxB"),2))
+for(myline in seq(0.5,2,0.5)){
+  axis(1, at=12.5, line=myline, labels=c(""))
+}
+axis(1, at=c(6.5,18.5), line=1, tick=FALSE, labels=c("cortex", "liver"))
+legend("bottomleft", title="Reference", legend=c("B6mm10","D2"), fill=c("black","tan"))
+
+```
+
+At 10 mismatches (maximum allowed by STAR default parameters), bias for D2 reference (similar to what observed previously on transcriptome).
+
+## All samples {.tabset}
+
+### 0
+
+```{r}
+# exactly matching
+plot(B6mm10all$Uniq0, pch=19, col="black", ylim=c(29,73), las=2, xaxt="n", ylab="Uniquely mapped percentage", xlab="Samples", main="0 mismatch allowed")
+points(D2all$Uniq0, pch=19, col="tan")
+##abline(v=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5))
+##axis(1, at=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5), labels=rep(c(""),7))
+##axis(1, at=c(c(2.5,5.5,8.5,11.5),12+c(2.5,5.5,8.5,11.5)), tick=FALSE, labels=rep(c("B6","BxD","D2","DxB"),2))
+for(myline in seq(0,2,0.5)){
+  axis(1, at=88, line=myline, labels=c(""))
+}
+axis(1, at=c(44.5,132.5), line=1, tick=FALSE, labels=c("cortex", "liver"))
+legend("bottomleft", title="Reference", legend=c("B6mm10","D2"), fill=c("black","tan"))
+```
+
+
+```{r}
+# Difference in mappability by reference for uniquely exactly mapped reads
+par(mfrow=c(1,2))
+
+# in cortex
+plot("", las=2, xlim=c(1,2), ylim=c(45,57), bty="l", xaxt="n", main="Cortex", xlab="Reference", ylab="Uniquely exactly mapped reads (%)")
+axis(1, at=1:2, labels=c("B6mm10","D2"))
+segments(x0=rep(2,176), y0=D2all[,"Uniq0"], x1=rep(1,176), y1=B6mm10all[,"Uniq0"],
+         lty = par("lty"), lwd = par("lwd"))
+points(rep(1,176),B6mm10all[,"Uniq0"], pch=19, cex=1)
+points(rep(2,176),D2all[,"Uniq0"], pch=19, cex=1)
+
+# in liver
+plot("", las=2, xlim=c(1,2), ylim=c(27,41), bty="l", xaxt="n", main="Liver", xlab="Reference", ylab="Uniquely exactly mapped reads (%)")
+axis(1, at=1:2, labels=c("B6mm10","D2"))
+segments(x0=rep(2,176), y0=D2all[,"Uniq0"], x1=rep(1,176), y1=B6mm10all[,"Uniq0"],
+         lty=par("lty"), lwd=1)
+points(rep(1,176),B6mm10all[,"Uniq0"], pch=19, cex=1)
+points(rep(2,176),D2all[,"Uniq0"], pch=19, cex=1)
+```
+
+### 1
+
+```{r}
+# 1 mismatch allowed
+plot(B6mm10all$Uniq1, pch=19, col="black", ylim=c(29,73), las=2, xaxt="n", ylab="Uniquely mapped percentage", xlab="Samples", main="1 mismatch allowed")
+points(D2all$Uniq1, pch=19, col="tan")
+for(myline in seq(0,2,0.5)){
+  axis(1, at=88, line=myline, labels=c(""))
+}
+axis(1, at=c(44.5,132.5), line=1, tick=FALSE, labels=c("cortex", "liver"))
+legend("bottomleft", title="Reference", legend=c("B6mm10","D2"), fill=c("black","tan"))
+```
+
+### 2
+
+```{r}
+# 2 mismatches allowed
+plot(B6mm10all$Uniq2, pch=19, col="black", ylim=c(29,73), las=2, xaxt="n", ylab="Uniquely mapped percentage", xlab="Samples", main="2 mismatches allowed")
+points(D2all$Uniq2, pch=19, col="tan")
+for(myline in seq(0,2,0.5)){
+  axis(1, at=88, line=myline, labels=c(""))
+}
+axis(1, at=c(44.5,132.5), line=1, tick=FALSE, labels=c("cortex", "liver"))
+legend("bottomleft", title="Reference", legend=c("B6mm10","D2"), fill=c("black","tan"))
+```
+
+### 3
+
+```{r}
+# 3 mismatches allowed
+plot(B6mm10all$Uniq3, pch=19, col="black", ylim=c(29,73), las=2, xaxt="n", ylab="Uniquely mapped percentage", xlab="Samples", main="3 mismatches allowed")
+points(D2all$Uniq3, pch=19, col="tan")
+for(myline in seq(0,2,0.5)){
+  axis(1, at=88, line=myline, labels=c(""))
+}
+axis(1, at=c(44.5,132.5), line=1, tick=FALSE, labels=c("cortex", "liver"))
+legend("bottomleft", title="Reference", legend=c("B6mm10","D2"), fill=c("black","tan"))
+```
+
+### 4
+
+```{r}
+# 4 mismatches allowed
+plot(B6mm10all$Uniq4, pch=19, col="black", ylim=c(29,73), las=2, xaxt="n", ylab="Uniquely mapped percentage", xlab="Samples", main="4 mismatches allowed")
+points(D2all$Uniq4, pch=19, col="tan")
+for(myline in seq(0,2,0.5)){
+  axis(1, at=88, line=myline, labels=c(""))
+}
+axis(1, at=c(44.5,132.5), line=1, tick=FALSE, labels=c("cortex", "liver"))
+legend("bottomleft", title="Reference", legend=c("B6mm10","D2"), fill=c("black","tan"))
+```
+
+### 5
+
+```{r}
+# 5 mismatches allowed
+plot(B6mm10all$Uniq5, pch=19, col="black", ylim=c(29,73), las=2, xaxt="n", ylab="Uniquely mapped percentage", xlab="Samples", main="5 mismatches allowed")
+points(D2all$Uniq5, pch=19, col="tan")
+for(myline in seq(0,2,0.5)){
+  axis(1, at=88, line=myline, labels=c(""))
+}
+axis(1, at=c(44.5,132.5), line=1, tick=FALSE, labels=c("cortex", "liver"))
+legend("bottomleft", title="Reference", legend=c("B6mm10","D2"), fill=c("black","tan"))
+```
+
+
+
+## By sample 
+
+```{r}
+# comparison number of mismatch allowed for each sample
+##par(mfcol=c(2,5))
+##for(mysample in rownames(B6mm10all)){
+  # on B6 mm10 reference
+##  plot(c(0:5),B6mm10all[mysample,], las=1, bty="l", pch=19, ylim=c(0,75), xlab="# mismatch allowed", ylab="Uniquely mapped % on B6 mm10", main=mysample)
+  # on D2 reference
+##  plot(c(0:5),D2all[mysample,], las=1, bty="l", pch=19, col="tan", ylim=c(0,75), xlab="# mismatch allowed", ylab="Uniquely mapped % on D2", main=mysample)
+##}
+
+par(mfrow=c(2,5))
+for(mysample in rownames(B6mm10all)){
+  # on B6 mm10 reference
+  plot(c(0:5),B6mm10all[mysample,], las=1, bty="l", pch=19, ylim=c(floor(min(B6mm10all[mysample,],D2all[mysample,])),ceiling(max(B6mm10all[mysample,],D2all[mysample,]))), xlab="# mismatch allowed", ylab="Uniquely mapped %", main=mysample)
+  # on D2 reference
+  points(c(0:5),D2all[mysample,], las=1, bty="l", pch=19, col="tan")
+}
+```
+
+Uniquely mapped percentage always increases with higher number of mismatch allowed.
+D2 vs B6? liver vs cortex? Shape of increase???
+
+
+## Genomic regions
+
+Which genomic regions are of interest? Are there a lot of reads mapping between genes?
+
+Use regions with higher coverage (window size? threshold?) and see if they intersect with gene annotation or not.
+
+# Testing chromosomes to include
+
+
+```{r, fig.height=4}
+
+par(mfrow=c(1,2))
+for(mysample in rownames(B6mm10majorchromosomes)){
+  # on B6 mm10 reference
+  plot(c(0:5,10),B6mm10majorchromosomes[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], las=1, bty="l", pch=19, ylim=c(floor(min(B6mm10majorchromosomes[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")])),ceiling(max(B6mm10majorchromosomes[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")]))), xlab="# mismatch allowed", ylab="Uniquely mapped %", main=mysample)
+  # on
+  points(c(0:5,10),B6mm10primaryassembly[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], las=1, bty="l", pch=19, col="blue")
+  points(c(0:5,10),B6mm10primaryassemblynoscaffolds[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], las=1, bty="l", pch=19, col="tomato3")
+  points(c(0:5,10),B6mm10[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], las=1, bty="l", pch=19, col="forestgreen")
+    # on D2 reference
+  points(c(0:5,10),D2[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], las=1, bty="l", pch=19, col="tan")
+  points(c(0:5,10),D2majorchromosomes[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], las=1, bty="l", pch=19, col="tan4")
+  legend("bottomright", legend=c("1-19,X", "no patches", "no scaffolds", "all", "D2", "D2 1-19,X"), pch=19, col=c("black", "blue", "tomato3", "forestgreen", "tan", "tan4"), cex=1)
+}
+
+
+```
+
+(Blue points are under red points.)
+
+## all
+
+Ever feature is allowed (if present): MT and Y chromosomes, scaffolds, patches
+
+```{r, fig.height=4}
+
+par(mfrow=c(1,2))
+for(mysample in rownames(B6mm10)){
+  # on B6 mm10 reference
+  plot(c(0:5,10),B6mm10[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], las=1, bty="l", pch=19, ylim=c(floor(min(B6mm10[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")])),ceiling(max(B6mm10[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")]))), xlab="# mismatch allowed", ylab="Uniquely mapped %", main=mysample)
+  points(c(0:5,10),D2[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], las=1, bty="l", pch=19, col="tan")
+  legend("bottomright", title="all features", legend=c("B6 mm10", "D2"), pch=19, col=c("black", "tan"), cex=1)
+}
+
+# all samples in 1 graph
+par(mfrow=c(1,1))
+plot(x="",y="", las=1, bty="l", pch=19, xlim=c(0,10), ylim=c(floor(min(B6mm10[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")])),ceiling(max(B6mm10[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")]))), xlab="# mismatch allowed", ylab="Uniquely mapped %")
+for(mysample in rownames(B6mm10)){
+  # on B6 mm10 reference
+  points(c(0:5,10),B6mm10[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], pch=19)
+  points(c(0:5,10),D2[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], las=1, bty="l", pch=19, col="tan")
+  legend("bottomright", legend=c("B6 mm10", "D2"), pch=19, col=c("black", "tan"), cex=1)
+}
+
+# all samples in 1 graph with segments per sample
+par(mfrow=c(1,1))
+plot(x="",y="", las=1, bty="l", pch=19, xlim=c(0,10), ylim=c(floor(min(B6mm10[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")])),ceiling(max(B6mm10[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")]))), xlab="# mismatch allowed", ylab="Uniquely mapped %")
+for(mysample in rownames(B6mm10)){
+  # on B6 mm10 reference
+  points(c(0:5,10),B6mm10[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], type="b", pch=19)
+  points(c(0:5,10),D2[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], las=1, bty="l", type="b", pch=19, col="tan")
+  legend("bottomright", legend=c("B6 mm10", "D2"), pch=19, col=c("black", "tan"), cex=1)
+}
+
+
+# calculate diff reference-specific
+CB6samples <- c("B61nsd", "B61sd", "B62nsd", "B62sd")
+LB6samples <- c("LB61nsd", "LB61sd", "LB62nsd", "LB62sd")
+CD2samples <- c("DB1nsd", "DB1sd", "DB2nsd", "DB2sd")
+LD2samples <- c("LDB1nsd", "LDB1sd", "LDB2nsd", "LDB2sd")
+
+mean(B6mm10[CB6samples,"Uniq0"]-D2[CB6samples,"Uniq0"])
+mean(B6mm10[LB6samples,"Uniq0"]-D2[LB6samples,"Uniq0"])
+mean(D2[CD2samples,"Uniq0"]-B6mm10[CD2samples,"Uniq0"])
+mean(D2[LD2samples,"Uniq0"]-B6mm10[LD2samples,"Uniq0"])
+
+```
+
+
+## no patches
+
+scaffolds, MT and Y chromosomes allowed
+
+```{r, fig.height=4}
+
+par(mfrow=c(1,2))
+for(mysample in rownames(B6mm10primaryassembly)){
+  # on B6 mm10 reference
+  plot(c(0:5,10),B6mm10primaryassembly[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], las=1, bty="l", pch=19, ylim=c(floor(min(B6mm10primaryassembly[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")])),ceiling(max(B6mm10primaryassembly[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")]))), xlab="# mismatch allowed", ylab="Uniquely mapped %", main=mysample)
+  points(c(0:5,10),D2[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], las=1, bty="l", pch=19, col="tan")
+  legend("bottomright", title="primary assembly", legend=c("B6 mm10", "D2"), pch=19, col=c("black", "tan"), cex=1)
+}
+
+# all samples in 1 graph
+par(mfrow=c(1,1))
+plot(x="",y="", las=1, bty="l", pch=19, xlim=c(0,10), ylim=c(floor(min(B6mm10primaryassembly[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")])),ceiling(max(B6mm10primaryassembly[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")]))), xlab="# mismatch allowed", ylab="Uniquely mapped %")
+for(mysample in rownames(B6mm10primaryassembly)){
+  # on B6 mm10 reference
+  points(c(0:5,10),B6mm10primaryassembly[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], pch=19)
+  points(c(0:5,10),D2[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], las=1, bty="l", pch=19, col="tan")
+  legend("bottomright", title="primary assembly", legend=c("B6 mm10", "D2"), pch=19, col=c("black", "tan"), cex=1)
+}
+
+# all samples in 1 graph with segments per sample
+par(mfrow=c(1,1))
+plot(x="",y="", las=1, bty="l", pch=19, xlim=c(0,10), ylim=c(floor(min(B6mm10primaryassembly[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")])),ceiling(max(B6mm10primaryassembly[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")]))), xlab="# mismatch allowed", ylab="Uniquely mapped %")
+for(mysample in rownames(B6mm10primaryassembly)){
+  # on B6 mm10 reference
+  points(c(0:5,10),B6mm10primaryassembly[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], type="b", pch=19)
+  points(c(0:5,10),D2[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], las=1, bty="l", type="b", pch=19, col="tan")
+  legend("bottomright", title="primary assembly", legend=c("B6 mm10", "D2"), pch=19, col=c("black", "tan"), cex=1)
+}
+
+# calculate diff reference-specific
+CB6samples <- c("B61nsd", "B62nsd")
+LB6samples <- c("LB61nsd", "LB62nsd")
+CD2samples <- c("DB1nsd", "DB2nsd")
+LD2samples <- c("LDB1nsd", "LDB2nsd")
+
+mean(B6mm10primaryassembly[CB6samples,"Uniq0"]-D2[CB6samples,"Uniq0"])
+mean(B6mm10primaryassembly[LB6samples,"Uniq0"]-D2[LB6samples,"Uniq0"])
+mean(D2[CD2samples,"Uniq0"]-B6mm10primaryassembly[CD2samples,"Uniq0"])
+mean(D2[LD2samples,"Uniq0"]-B6mm10primaryassembly[LD2samples,"Uniq0"])
+```
+
+## major chromosomes
+
+Considering only chromosomes 1 to 19 and X
+
+```{r, fig.height=4}
+
+par(mfrow=c(1,2))
+for(mysample in rownames(B6mm10majorchromosomes)){
+  # on B6 mm10 reference
+  plot(c(0:5,10),B6mm10majorchromosomes[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], las=1, bty="l", pch=19, ylim=c(floor(min(B6mm10majorchromosomes[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2majorchromosomes[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")])),ceiling(max(B6mm10majorchromosomes[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2majorchromosomes[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")]))), xlab="# mismatch allowed", ylab="Uniquely mapped %", main=mysample)
+  points(c(0:5,10),D2majorchromosomes[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], las=1, bty="l", pch=19, col="tan")
+  legend("bottomright", title="1-19,X", legend=c("B6 mm10", "D2"), pch=19, col=c("black", "tan"), cex=1)
+}
+
+# all samples in 1 graph
+par(mfrow=c(1,1))
+plot(x="",y="", las=1, bty="l", pch=19, xlim=c(0,10), ylim=c(floor(min(B6mm10majorchromosomes[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2majorchromosomes[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")])),ceiling(max(B6mm10majorchromosomes[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2majorchromosomes[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")]))), xlab="# mismatch allowed", ylab="Uniquely mapped %")
+for(mysample in rownames(B6mm10majorchromosomes)){
+  # on B6 mm10 reference
+  points(c(0:5,10),B6mm10majorchromosomes[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], pch=19)
+  points(c(0:5,10),D2majorchromosomes[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], las=1, bty="l", pch=19, col="tan")
+  legend("bottomright", title="1-19,X", legend=c("B6 mm10", "D2"), pch=19, col=c("black", "tan"), cex=1)
+}
+
+# all samples in 1 graph with segments per sample
+par(mfrow=c(1,1))
+plot(x="",y="", las=1, bty="l", pch=19, xlim=c(0,10), ylim=c(floor(min(B6mm10majorchromosomes[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2majorchromosomes[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")])),ceiling(max(B6mm10majorchromosomes[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2majorchromosomes[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")]))), xlab="# mismatch allowed", ylab="Uniquely mapped %")
+for(mysample in rownames(B6mm10majorchromosomes)){
+  # on B6 mm10 reference
+  points(c(0:5,10),B6mm10majorchromosomes[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], type="b", pch=19)
+  points(c(0:5,10),D2majorchromosomes[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], las=1, bty="l", type="b", pch=19, col="tan")
+  legend("bottomright", title="1-19,X", legend=c("B6 mm10", "D2"), pch=19, col=c("black", "tan"), cex=1)
+}
+
+# calculate diff reference-specific
+
+mean(B6mm10majorchromosomes[CB6samples,"Uniq0"]-D2majorchromosomes[CB6samples,"Uniq0"])
+mean(B6mm10majorchromosomes[LB6samples,"Uniq0"]-D2majorchromosomes[LB6samples,"Uniq0"])
+mean(D2majorchromosomes[CD2samples,"Uniq0"]-B6mm10majorchromosomes[CD2samples,"Uniq0"])
+mean(D2majorchromosomes[LD2samples,"Uniq0"]-B6mm10majorchromosomes[LD2samples,"Uniq0"])
+```
+
+
+## highest mapping rate
+
+Considering only chromosomes 1 to 19 and X for B6 mm10. Considering all features for D2.
+(what has the highest mapping rate)
+
+```{r, fig.height=4, fig.align='center'}
+
+par(mfrow=c(1,2))
+for(mysample in rownames(B6mm10majorchromosomes)){
+  # on B6 mm10 reference
+  plot(c(0:5,10),B6mm10majorchromosomes[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], las=1, bty="l", pch=19, ylim=c(floor(min(B6mm10majorchromosomes[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")])),ceiling(max(B6mm10majorchromosomes[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")]))), xlab="# mismatch allowed", ylab="Uniquely mapped %", main=mysample)
+  points(c(0:5,10),D2[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], las=1, bty="l", pch=19, col="tan")
+  legend("bottomright", legend=c("B6 mm10 1-19,X", "D2"), pch=19, col=c("black", "tan"), cex=1)
+}
+
+# all samples in 1 graph
+par(mfrow=c(1,1))
+plot(x="",y="", las=1, bty="l", pch=19, xlim=c(0,10), ylim=c(floor(min(B6mm10majorchromosomes[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")])),ceiling(max(B6mm10majorchromosomes[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")]))), xlab="# mismatch allowed", ylab="Uniquely mapped %")
+for(mysample in rownames(B6mm10majorchromosomes)){
+  # on B6 mm10 reference
+  points(c(0:5,10),B6mm10majorchromosomes[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], pch=19)
+  points(c(0:5,10),D2[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], las=1, bty="l", pch=19, col="tan")
+  legend("bottomright", legend=c("B6 mm10 1-19,X", "D2"), pch=19, col=c("black", "tan"), cex=1)
+}
+
+# all samples in 1 graph
+par(mfrow=c(1,1))
+plot(x="",y="", las=1, bty="l", pch=19, xlim=c(0,10), ylim=c(floor(min(B6mm10majorchromosomes[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")])),ceiling(max(B6mm10majorchromosomes[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")],D2[,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")]))), xlab="# mismatch allowed", ylab="Uniquely mapped %")
+for(mysample in rownames(B6mm10majorchromosomes)){
+  # on B6 mm10 reference
+  points(c(0:5,10),B6mm10majorchromosomes[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], type="b", pch=19)
+  points(c(0:5,10),D2[mysample,c("Uniq0","Uniq1","Uniq2","Uniq3","Uniq4","Uniq5","Uniq10")], las=1, bty="l", type="b", pch=19, col="tan")
+  legend("bottomright", legend=c("B6 mm10 1-19,X", "D2"), pch=19, col=c("black", "tan"), cex=1)
+}
+
+# calculate diff reference-specific
+mean(B6mm10majorchromosomes[CB6samples,"Uniq0"]-D2[CB6samples,"Uniq0"])
+mean(B6mm10majorchromosomes[LB6samples,"Uniq0"]-D2[LB6samples,"Uniq0"])
+mean(D2[CD2samples,"Uniq0"]-B6mm10majorchromosomes[CD2samples,"Uniq0"])
+mean(D2[LD2samples,"Uniq0"]-B6mm10majorchromosomes[LD2samples,"Uniq0"])
+```
+
+# Discussion
+
+The use of more restrictive parameters and mapping on the genome instead of transcriptome seems to show:
+
+* Still difference in mappability for the 2 tissues. Still fewer reads map from liver than from cortex.
+* Some specificity of sample to its reference (B6 samples map better on B6 reference) instead of all samples map higher on D2. F1 samples map better on B6.
+* This specificity seems to decrease by increasing the number of mismatch allowed.
+
+These are due to:
+
+* map on genome vs transcriptome?
+* constraints (no indels, no splicing, no soft-clip, no mismatch)?
+
+
+Various info:
+
+* Mouse lines heterogeneozity: in the genotypes (mm9) merged, B6 shows 93% of "B" (0% of "D", 7% of "H", <1% of "U"), D2 shows 81% of "D" (0% of "B", 19% of "H", <1% of "U"). (H=heterogenous, B=homozygote B6, D=homozygote D2, U=Unknown). In the genotypes (mm9) from GeneNetwork there is no heterogenous loci for parental strains.
+* Using "free" (STAR default) parameters, 77% of uniquely mapped reads on genome compared to 75.78% (unfiltered) on transcriptome (first replicate B6 NSD liver on D2 reference).
+* Using restrictive parameters, 46.16% of uniquely mapped reads on genome compared to 60.02% (introns allowed) on transcriptome (first replicate B6 NSD cortex on D2 reference).
+
+
+Ideas to go further:
+
+* Be less restrictive on introns, indels, and soft-clipping? (aka just restrict mismatches)
+* Check in other tissues (BXD samples from Bernard Thorens group used by Maxime for variant calling)?

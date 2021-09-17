@@ -1,0 +1,106 @@
+---
+title: "Reference Bias"
+author: "Nastassia"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    keep_md: yes
+    code_folding: hide
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    df_print: paged
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, fig.path="Graphs/", warning=TRUE)
+
+#load needed libraries
+library(knitr)
+library(vioplot)
+```
+
+# Differential mapping (DM) analysis
+
+## Loading data
+
+```{r LoadingData}
+# loading differentially mapped (DM) data
+DM_cortex <- read.table("DifferentialMapping_Limma_Cortex.txt")
+DM_liver <- read.table("DifferentialMapping_Limma_Liver.txt")
+
+##/mnt/nas/BXD/data/transcriptome/5_DifferentialMapping/DifferentialMapping_Limma_Cortex.txt
+```
+
+## selecting significant genes
+
+```{r SignificantSelection}
+idx_cortex <- which(DM_cortex$adj.P.Val<0.05)
+idx_liver <- which(DM_liver$adj.P.Val<0.05)
+
+length(idx_cortex)
+length(idx_liver)
+
+length(which(DM_cortex$logFC[idx_cortex]<0))
+length(which(DM_cortex$logFC[idx_cortex]>0))
+length(which(DM_liver$logFC[idx_liver]<0))
+length(which(DM_liver$logFC[idx_liver]>0))
+```
+
+## plotting reference bias for DM genes
+
+```{r ReferenceBias_DM}
+hist(DM_cortex$logFC[idx_cortex], breaks=100, freq=FALSE, las=1)
+abline(v=0, col="darkred", lty=2, lwd=2)
+lines(density(DM_cortex$logFC[idx_cortex], adjust=1.5), lwd=3)   # add another "smoother" density
+
+hist(DM_liver$logFC[idx_liver], breaks=100, freq=FALSE, las=1)
+abline(v=0, col="darkred", lty=2, lwd=2.5)
+lines(density(DM_liver$logFC[idx_liver], adjust=1.5), lwd=3)   # add another "smoother" density
+```
+
+# cis-eQTL
+
+## loading data
+
+```{r LoadData_ciseQTL}
+# loading data
+ciseQTL_cortexNSD <- read.table("ciseQTL.Cortex.NSD.txt")
+##BACKUP/BXD_mm10/Data/IntermediateLayer/cis-eQTL/ciseQTL.Cortex.NSD.txt
+##BACKUP/BXD_mm10/Data/IntermediateLayer/trans-eQTL/transeQTL_CNSD_filtered.txt
+# column V9 is FC?
+# column v11 is p-value.
+```
+
+## processing data
+
+```{r ciseQTL_selection}
+# select significant QTL
+idx_ciseQTL_cortexNSD <- which(ciseQTL_cortexNSD$V11<0.05)
+
+length(idx_ciseQTL_cortexNSD)
+
+
+length(which(ciseQTL_cortexNSD[idx_ciseQTL_cortexNSD,9]<0))
+length(which(ciseQTL_cortexNSD[idx_ciseQTL_cortexNSD,9]>0))
+```
+
+
+## plotting reference bias for cis-eQTL
+
+```{r ReferenceBias_ciseQTL}
+plot(ciseQTL_cortexNSD[idx_ciseQTL_cortexNSD,c(11,9)])
+
+hist(ciseQTL_cortexNSD[idx_ciseQTL_cortexNSD,9], xlim=c(-1,1), breaks=100, freq=FALSE, las=1)
+abline(v=0, col="darkred", lty=2, lwd=2)
+lines(density(ciseQTL_cortexNSD[idx_ciseQTL_cortexNSD,9], adjust=1.5), lwd=3) 
+```
+

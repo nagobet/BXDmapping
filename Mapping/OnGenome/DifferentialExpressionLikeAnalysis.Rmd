@@ -1,0 +1,329 @@
+---
+title: "Differential Expression-like analysis"
+author: "Nastassia Gobet, Maxime Jan"
+date: '3 September 2019 - 7 January 2020'
+output:
+  html_document:
+    code_folding: hide
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    df_print: paged
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, warning=TRUE, fig.path="Graphs/DifferentialMappingAnalysis/")
+
+# set working directory
+##setwd("F:/BXD/analysis/Mapping/OnGenome")
+
+# loading needed pacakges
+library(knitr)
+##if (!requireNamespace("BiocManager"))
+##  install.packages("BiocManager")
+##BiocManager::install()
+##BiocManager::install(c('edgeR', 'DESeq'))
+library(edgeR)
+library(limma)
+library(Biobase)
+```
+
+# GOAL
+
+Perform differential expression-like analysis, expect that to compare mapping on D2 or B6 mm10 primary assembly (refered after as B6). Differential mapping analysis.
+
+# DATA
+
+## gene expression table
+
+The input data are raw counts of gene expression (counted per sample by ht-count, then grouped). Rows are genes and columns are libraries/samples. (One library per sample, no replicate except for parental lines). Samples are lines + condition (SD or NSD).
+
+### Loading
+
+```{r Loading}
+# Import the raw counts table for counts mapped on D2
+countsD2 <- read.table("F:/BXD/data/transcriptome/3_counting_htseq/OnGenome/D2/SummaryCountD2.tab", header=TRUE, row.names=1, stringsAsFactors=FALSE)
+# Import the raw counts table for counts mapped on B6
+countsB6 <- read.table("F:/BXD/data/transcriptome/3_counting_htseq/OnGenome/B6mm10_primaryassembly/SummaryCountB6mm10_primaryassembly.tab", header=TRUE, row.names=1, stringsAsFactors=FALSE)
+
+# change X into C (for cortex) in colnames
+colnames(countsD2) <- gsub("X","C", colnames(countsD2))
+colnames(countsB6) <- gsub("X","C", colnames(countsB6))
+
+# add C for parental and F1 samples from cortex
+colnames(countsD2)[grep("^[BD]", colnames(countsD2))] <- paste("C", colnames(countsD2)[grep("^[BD]", colnames(countsD2))], sep="")
+colnames(countsB6)[grep("^[BD]", colnames(countsB6))] <- paste("C", colnames(countsB6)[grep("^[BD]", colnames(countsB6))], sep="")
+```
+
+There are `r ncol(countsD2)` libraries and `r nrow(countsD2)` genes in D2 counts.
+There are `r ncol(countsB6)` libraries and `r nrow(countsB6)` genes in B6 counts.
+
+```{bash eval=FALSE, include=FALSE}
+# retrieve D2 gene names for those in the gtf file
+grep "gene_name" references/geneD2.tab | cut -f 9 | cut -d ";" -f 1,3 --output-delimiter "" | cut -d " " -f 2,4 > references/gene_names_D2.tab
+# retrieve B6 mm10 gene_names for those in the gtf file
+grep "gene_name" references/geneB6mm10.tab | cut -f 9 | cut -d ";" -f 1,3 --output-delimiter "" | cut -d " " -f 2,4 > references/gene_names_B6mm10.tab
+```
+
+### Dealing with gene names
+
+Convert geneID into gene names, remove duplicate gene names, keep only gene names common to D2 and B6.
+
+```{r GeneNames}
+# load D2 geneID to gene name convert table
+D2geneConvert <- read.table("F:/BXD/references/gene_names_D2.tab", header=FALSE, stringsAsFactors=FALSE, sep="\t")
+colnames(D2geneConvert) <- c("GeneID", "GeneName")
+# remove replicate gene names
+D2geneConvert <- D2geneConvert[-which(!isUnique(D2geneConvert$GeneName)),]
+rownames(D2geneConvert) <- 1:nrow(D2geneConvert)
+### could be improved by adding the counts from different transcripts
+
+B6mm10geneConvert <- read.table("F:/BXD/references/gene_names_B6mm10.tab", header=FALSE, stringsAsFactors=FALSE, sep="\t")
+colnames(B6mm10geneConvert) <- c("GeneID", "GeneName")
+# remove B6 replicate gene names
+B6mm10geneConvert <- B6mm10geneConvert[-which(!isUnique(B6mm10geneConvert$GeneName)),]
+rownames(B6mm10geneConvert) <- 1:nrow(B6mm10geneConvert)
+### could be improved by adding the counts from different transcripts
+
+# try to find B6 matching names
+idx <- na.omit(match(rownames(countsB6),B6mm10geneConvert$GeneID))
+# take B6 subset
+countsB6 <- countsB6[B6mm10geneConvert$GeneID[idx],]
+
+# convert B6 rownames (GeneID) into gene name
+rownames(countsB6) <- B6mm10geneConvert$GeneName[idx]
+
+# try to find D2 matching names
+idx <- na.omit(match(rownames(countsD2),D2geneConvert$GeneID))
+# take D2 subset
+countsD2 <- countsD2[D2geneConvert$GeneID[idx],]
+
+# convert D2 rownames (GeneID) into gene name
+rownames(countsD2) <- D2geneConvert$GeneName[idx]
+
+# find which genes are common between B6 and D2
+commongenes <- intersect(rownames(countsD2), rownames(countsB6))
+# get back geneID of common genes
+any(is.na(match(commongenes, B6mm10geneConvert$GeneName)))
+any(is.na(match(commongenes, D2geneConvert$GeneName)))
+commongenesB6id <- B6mm10geneConvert$GeneID[match(commongenes, B6mm10geneConvert$GeneName)]
+commongenesD2id <- D2geneConvert$GeneID[match(commongenes, D2geneConvert$GeneName)]
+# save common gene names
+write.table(commongenes, file="F:/BXD/data/transcriptome/3_counting_htseq/OnGenome/commongenes.txt", col.names=FALSE, row.names=FALSE, quote=FALSE)
+# save common genes names B6 id
+write.table(commongenesB6id, file="F:/BXD/data/transcriptome/3_counting_htseq/OnGenome/commongenesB6id.txt", col.names=FALSE, row.names=FALSE, quote=FALSE)
+# save common genes names D2 id
+write.table(commongenesD2id, file="F:/BXD/data/transcriptome/3_counting_htseq/OnGenome/commongenesD2id.txt", col.names=FALSE, row.names=FALSE, quote=FALSE)
+
+# keep only genes in common between B6 and D2 (and ensure that rownames is the same in both dataset)
+countsD2 <- countsD2[commongenes,]
+countsB6 <- countsB6[commongenes,]
+```
+
+There are `r nrow(countsD2)` genes in D2 counts and `r nrow(countsB6)` genes in B6 counts.
+
+### Splitting
+
+Splitting between tissue (cortex and liver)
+
+```{r}
+# add mapping reference in column names
+colnames(countsD2) <- paste(colnames(countsD2), "D2", sep="_")
+colnames(countsB6) <- paste(colnames(countsB6), "B6", sep="_")
+
+# separate tissue instead of mapping reference
+countsCortex <- cbind(countsD2[,grep("C", colnames(countsD2))], countsB6[,grep("C", colnames(countsB6))])
+countsLiver <- cbind(countsD2[,grep("L", colnames(countsD2))],countsB6[,grep("L", colnames(countsB6))])
+```
+
+# Analysis
+
+## Filtering
+
+We want to filter the expression data to take only gene with average expression above 10. This is an arbitrary threshold to remove genes that are of low abundance, more likely to be noisy.
+
+```{r filtering}
+# create a subset of the count table, filtering out rows (genes) with average counts <= 10
+##countsCortex10 <- countsCortex[which(apply(countsCortex, MARGIN=1, FUN=mean)>10),]
+##countsLiver10 <- countsLiver[which(apply(countsLiver, MARGIN=1, FUN=mean)>10),]
+countsCortex <- countsCortex[which(apply(countsCortex, MARGIN=1, FUN=mean)>10),]
+countsLiver <- countsLiver[which(apply(countsLiver, MARGIN=1, FUN=mean)>10),]
+
+# create a function that plots the histogram + density curve
+plotHistDensity <- function(dataset){
+  hist(dataset, freq=FALSE)
+  lines(density(dataset), lwd=2)
+}
+##plotHistDensity(rnorm(10000))
+##par(mfrow=c(1,2))
+##plotHistDensity(log10(unlist(apply(countsCortex, MARGIN=1, FUN=mean))))
+##plotHistDensity(log10(unlist(apply(countsCortex10, MARGIN=1, FUN=mean))))
+##plotHistDensity(log10(unlist(apply(countsLiver, MARGIN=1, FUN=mean))))
+##plotHistDensity(log10(unlist(apply(countsLiver10, MARGIN=1, FUN=mean))))
+```
+
+The filtered datasets have `r nrow(countsCortex)` genes in cortex and `r nrow(countsLiver)` genes in liver.
+
+## Standarization
+
+The normalization is performed using the Weighted trimmed mean of M-values (TMM) method of the edgeR package. This step standarizes the counts gene expression to take into account the variation in library size (=number of counts per library), the variation in length of the transcripts, and in RNA population variation. (Robinson, Genome Biology, 2010).
+
+
+```{r Normalization}
+# formatting for edgeR (creates a DGEList object from the dataframe)
+dC <- DGEList(counts=countsCortex)
+dL <- DGEList(counts=countsLiver)
+
+# calculate the normalization factors for each sample TMM method (effective library size)
+dC <- calcNormFactors(dC, method="TMM")
+dL <- calcNormFactors(dL, method="TMM")
+
+# calculate CPM and normalize the counts 
+normalizedCPMcountsCortex <- data.frame(cpm(dC, normalized.lib.sizes=TRUE))
+normalizedCPMcountsLiver <- data.frame(cpm(dL, normalized.lib.sizes=TRUE))
+
+# Export normalized CPM
+write.table(normalizedCPMcountsCortex, file="F:/BXD/data/transcriptome/4_normalization/D2B6_edgeRTMMnormalized_CPM_Cortex.tab", row.names=TRUE, sep="\t", quote=FALSE)
+write.table(normalizedCPMcountsLiver, file="F:/BXD/data/transcriptome/4_normalization/D2B6_edgeRTMMnormalized_CPM_Liver.tab", row.names=TRUE, sep="\t", quote=FALSE)
+
+# calculate log2 CPM and normalize the counts 
+normalizedlog2CPMcountsCortex <- data.frame(cpm(dC, normalized.lib.sizes=TRUE, log=TRUE))
+normalizedlog2CPMcountsLiver <- data.frame(cpm(dL, normalized.lib.sizes=TRUE, log=TRUE))
+
+# Export normalized CPM
+write.table(normalizedlog2CPMcountsCortex, file="F:/BXD/data/transcriptome/4_normalization/D2B6_edgeRTMMnormalized_log2CPM_Cortex.tab", row.names=TRUE, sep="\t", quote=FALSE)
+write.table(normalizedlog2CPMcountsLiver, file="F:/BXD/data/transcriptome/4_normalization/D2B6_edgeRTMMnormalized_log2CPM_Liver.tab", row.names=TRUE, sep="\t", quote=FALSE)
+```
+
+## Differential gene mapping
+
+Find which genes appear up- or down-regulated if mapping on reference rather than the other.
+
+This is done here using voom from limma package.
+
+```{r DifferentialMappingcortex}
+# prepare the design
+variables <- matrix(unlist(strsplit(colnames(normalizedCPMcountsCortex), "_")), ncol=2, byrow=TRUE)
+colnames(variables) <- c("samplename","mappingref")
+strains <- factor(gsub("[Cnsd]","",variables[,"samplename"]))
+design <- model.matrix(~strains+factor(variables[,"mappingref"]))
+
+# by default the normalization method is quantile (voom calls normalizeBetweenArrays)
+# plot the mean-variance trend
+##res <- voom(countsCortex, design, plot=TRUE, lib.size=colSums(countsCortex)*dC$samples$norm.factors)
+resC <- voom(dC, design, plot=TRUE)
+resCortexNorm <- resC$E
+
+# fitting
+# fit the coefficient of the linear model
+fitC <- lmFit(resC, design)
+# calculates the t-statistics
+fitC2 <- eBayes(fitC)
+
+# write all results
+resultTable <- topTable(fitC2, coef=ncol(fitC$coefficients), adjust="fdr", sort.by="B", number=1000000)
+# sort by adjusted p-value
+resultTable <- resultTable[order(resultTable$adj.P.Val),]
+
+# store information about DE analysis
+write.table(resultTable, file="F:/BXD/data/transcriptome/5_DifferentialMapping/DifferentialMapping_Limma_Cortex.txt", row.names=TRUE, sep="\t", quote=FALSE)
+```
+
+```{r DifferentialMappingLiver}
+# prepare the design
+variables <- matrix(unlist(strsplit(colnames(normalizedCPMcountsLiver), "_")), ncol=2, byrow=TRUE)
+colnames(variables) <- c("samplename","mappingref")
+strains <- factor(gsub("[Cnsd]","",variables[,"samplename"]))
+design <- model.matrix(~strains+factor(variables[,"mappingref"]))
+
+# by default the normalization method is quantile (voom calls normalizeBetweenArrays)
+# plot the mean-variance trend
+##res <- voom(countsLiver, design, plot=TRUE, lib.size=colSums(countsLiver)*dL$samples$norm.factors)
+resL <- voom(dL, design, plot=TRUE)
+resLiverNorm <- resL$E
+
+# fitting
+# fit the coefficient of the linear model
+fitL <- lmFit(resL, design)
+# calculates the t-statistics
+fitL2 <- eBayes(fitL)
+
+# write all results
+resultTable <- topTable(fitL2, coef=ncol(fitL$coefficients), adjust="fdr", sort.by="B", number=1000000)
+# sort by adjusted p-value
+resultTable <- resultTable[order(resultTable$adj.P.Val),]
+
+# store information about DE analysis
+write.table(resultTable, file="F:/BXD/data/transcriptome/5_DifferentialMapping/DifferentialMapping_Limma_Liver.txt", row.names=TRUE, sep="\t", quote=FALSE)
+```
+
+# Plotting results
+
+Volcano plots
+
+```{r PlottingResults, fig.width=4}
+# load table with results of differential expression
+DMdata_Cortex <- read.table('F:/BXD/data/transcriptome/5_DifferentialMapping/DifferentialMapping_Limma_Cortex.txt', sep="\t")
+DMdata_Liver <- read.table('F:/BXD/data/transcriptome/5_DifferentialMapping/DifferentialMapping_Limma_Liver.txt', sep="\t")
+
+# volcano plot all transcripts in black and significant in red
+# set the colors
+palette(c("black", "brown3"))
+
+# plot for Cortex
+plot(1:nrow(DMdata_Cortex), DMdata_Cortex$logFC, las=1, pch=20, col=as.factor(DMdata_Cortex$adj.P.Val<=0.05),
+       main="DM in Cortex", xlab="rank of adjusted p-value", ylab="-logFC")
+
+# plot for Liver
+plot(1:nrow(DMdata_Liver), DMdata_Liver$logFC, las=1, pch=20, col=as.factor(DMdata_Liver$adj.P.Val<=0.05),
+       main="DM in Liver", xlab="rank of adjusted p-value", ylab="-logFC")
+```
+
+The -logFC represents ratio of D2 over B6 (positive values map better on D2, negative values map better on B6).
+
+`r round(length(which(DMdata_Cortex$adj.P.Val<=0.05))/length(DMdata_Cortex$adj.P.Val)*100)`% of genes are significantly (below or equal to 0.05) differentially mapped in cortex, and `r round(length(which(DMdata_Liver$adj.P.Val<=0.05))/length(DMdata_Liver$adj.P.Val)*100)`% in liver.
+
+```{r}
+# get top 5 up- and top 5 down-measured genes
+DMdata_Cortex <- DMdata_Cortex[order(DMdata_Cortex$logFC),]
+head(DMdata_Cortex,5)
+print(head(DMdata_Cortex[,c("logFC","adj.P.Val")],5))
+tail(DMdata_Cortex,5)
+print(tail(DMdata_Cortex[,c("logFC","adj.P.Val")],5))
+
+DMdata_Liver <- DMdata_Liver[order(DMdata_Liver$logFC),]
+head(DMdata_Liver,5)
+print(head(DMdata_Liver[,c("logFC","adj.P.Val")],5))
+tail(DMdata_Liver,5)
+print(tail(DMdata_Liver[,c("logFC","adj.P.Val")],5))
+
+for (mytissue in c("Cortex","Liver")){
+  completelist <- rownames(get(paste("DMdata_", mytissue, sep="")))
+  for (mygene in c(head(completelist, 5), tail(completelist, 5))){
+    print(boxplot(as.numeric(get(paste("res", mytissue, "Norm", sep=""))[mygene,]) ~ factor(variables[, "mappingref"]), main=paste(mygene, "in", mytissue), xlab="Reference", ylab="Normalized (TMM, voom) log2 cpm gene expression"))
+  }
+}
+
+# how many have a log fold change (absolute value) above 2?
+length(which(abs(DMdata_Cortex$logFC)>2))
+length(which(abs(DMdata_Liver$logFC)>2))
+```
+
+```{r}
+# testing
+plot(DMdata_Liver$adj.P.Val, pch=19)
+
+plot(DMdata_Liver$adj.P.Val,DMdata_Liver$logFC, pch=19)
+
+plot(log(DMdata_Liver$adj.P.Val),DMdata_Liver$logFC, pch=19)
+points(log(DMdata_Liver$adj.P.Val[abs(DMdata_Liver$adj.P.Val)<0.001]),DMdata_Liver$logFC[abs(DMdata_Liver$adj.P.Val)<0.001], pch=19, col="tomato3")
+```
+

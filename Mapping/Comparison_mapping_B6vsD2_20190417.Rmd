@@ -1,0 +1,558 @@
+---
+title: "Comparison mapping B6 vs D2"
+author: "Nastassia Gobet"
+date: '1 April 2019 - '
+output:
+  html_document:
+    code_folding: hide
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, fig.path="Graphs/", warning=TRUE)
+
+
+#load needed libraries
+library(knitr)
+library(vioplot)
+
+# set working directory
+##setwd("F:/BXD/analyses/Comparison_mapping_B6vsD2")
+
+```
+
+# Goal
+
+Compare mapping on different references:
+
+* B6 mm9
+* B6 mm10
+* D2
+* AKRJ
+
+All the sequences (.fasta) and annotations (.gtf) are taken from Ensembl (http://www.ensembl.org/Mus_musculus/Info/Index), release 94 for B6 mm10, D2, and AKRJ; release 67 for B6 mm9.
+
+More info
+For B6, automatic based on experimental evidence (ensembl) and manual (havana) annotation (http://www.ensembl.org/info/genome/genebuild/genome_annotation.html). The 2 annotation types are merged, and genes supported by the 2 are grouped as the GENECODE set for mouse (https://www.gencodegenes.org/). Gene names come from here (http://www.informatics.jax.org/).
+
+http://www.ensembl.org/info/genome/genebuild/refseq_comparison.html
+
+For D2 and AKRJ, https://www.sanger.ac.uk/science/data/mouse-genomes-project and mouse papers (Mouse genomic variation and its effect on phenotypes and gene regulation.).
+
+
+Measures of reference quality:
+
+* assembly
+    * number of chromosome
+    * presence/absence of chromosome y
+    * presence/absence of MT chromosome
+    * total bp
+* gene annotation
+    * number of genes
+    * number of transcripts
+    * number of exons
+    * total bp
+
+
+Measures of alignment quality:
+
+* reads percentage: uniquely mapped, multiply mapped, unmapped
+* coverage?
+
+
+
+Specific questions:
+
+* Does B6 samples map better than D2 samples on B6 reference, and D2 samples map better than B6 samples on D2 reference?
+* Does the mapping percentage depends on the B6/D2 ratio of the sample?
+* Why all samples map better on D2 than B6? (question from observation of the dataset)
+
+
+# Analysis
+
+Load and clean data
+
+```{r input_data}
+# load tables with mapping statistics
+map_B6mm10 <- read.table("../../data/transcriptome/2_mapping_STAR/2-pass/MappingStatisticsB6mm10.tsv", header=TRUE, stringsAsFactors=FALSE, row.names="Sample_Name")
+map_B6mm9 <- read.table("../../data/transcriptome/2_mapping_STAR/2-pass/MappingStatisticsB6mm9.tsv", header=TRUE, stringsAsFactors=FALSE, row.names="Sample_Name")
+map_D2 <- read.table("../../data/transcriptome/2_mapping_STAR/2-pass/MappingStatisticsD2.tsv", header=TRUE, stringsAsFactors=FALSE, row.names="Sample_Name")
+map_AKRJ <- read.table("../../data/transcriptome/2_mapping_STAR/2-pass/MappingStatisticsAKRJ.tsv", header=TRUE, stringsAsFactors=FALSE, row.names="Sample_Name")
+
+# calculate the unmapped percentage
+map_B6mm9$Unmapped <- apply(map_B6mm9[, c("TooLoci","TooMismatches","TooShort","Others","Chimeric")], MARGIN=1, FUN=sum)
+map_B6mm10$Unmapped <- apply(map_B6mm10[, c("TooLoci","TooMismatches","TooShort","Others","Chimeric")], MARGIN=1, FUN=sum)
+map_D2$Unmapped <- apply(map_D2[, c("TooLoci","TooMismatches","TooShort","Others","Chimeric")], MARGIN=1, FUN=sum)
+map_AKRJ$Unmapped <- apply(map_AKRJ[, c("TooLoci","TooMismatches","TooShort","Others","Chimeric")], MARGIN=1, FUN=sum)
+
+# load B6 vs D2 ratio (counts GeneNetwork mm10 genotypes)
+B6D2ratiotmp <- read.table("//nas.unil.ch/CIG/GROUPS/FRANKEN/common/PROJECTS/BXD/Analysis/Results/B6D2ratio/B6D2ratio.tab", header=TRUE)
+# remove mouse line 63
+B6D2ratio <- B6D2ratiotmp[,setdiff(colnames(B6D2ratiotmp),"BXD063")]
+rm(B6D2ratiotmp)
+
+# load SraTable (for GSM to condition/line/tissue conversion)
+sratable <- read.table("../../data/transcriptome/RNAseq/SraRunTable.txt", sep="\t", header=TRUE, stringsAsFactors=FALSE)
+uniqSratmp <- unique(sratable[, c("Sample_Name", "condition", "genotype", "tissue")])
+
+# load table to convert mouse lines names
+MouseLines <- read.table("../../data/BXDlinesConvert.tsv", sep="\t", header=FALSE, stringsAsFactors=FALSE)
+
+# clean mouse lines nams in sra table
+uniqSra <- uniqSratmp
+uniqSra$genotype <- MouseLines$V1[match(uniqSratmp$genotype,MouseLines$V2)]
+rm(uniqSratmp, MouseLines)
+
+# load metrics on assembly
+assemblyStats <- read.table("../../data/transcriptome/AssemblyStats.tsv", header=TRUE, stringsAsFactors=FALSE, row.names="Assembly")
+# load metrics on annotation
+annotationStats <- read.table("../../data/transcriptome/AnnotationStats.tsv", header=TRUE, stringsAsFactors=FALSE, row.names="Assembly")
+
+```
+
+## Assembly quality
+
+```{r assembly}
+# display assembly quality measures
+kable(assemblyStats, caption="Assembly quality metrics")
+
+# size of B6 mm10 over each assembly
+round(assemblyStats["B6_mm10", "Length_bp"]/assemblyStats$Length_bp, digits=1)
+```
+
+The B6 mm10 assembly is bigger than B6 mm10, D2, and AKRJ. Only the B6 assemblies have the Y chromosome and MT chromosome.
+
+## Annotation quality
+
+```{r annotation}
+# display annotation quality measures
+kable(annotationStats, caption="Annotation quality metrics")
+
+# plot stats
+par(mfrow=c(2,2), mar=c(4.1, 4.1, 2.1, 2.1))
+plot(annotationStats$nb_gene, pch=19, xlab="Reference", ylab="Genes count)", xaxt="n", col=c("grey60","black","tan","darkred"))
+axis(1, at=1:4, labels=c("B6mm9","B6mm10","D2","AKRJ"))
+plot(annotationStats$nb_transcripts, pch=19, xlab="Reference", ylab="Transcripts (count)", xaxt="n", col=c("grey60","black","tan","darkred"))
+axis(1, at=1:4, labels=c("B6mm9","B6mm10","D2","AKRJ"))
+plot(annotationStats$nb_exons, pch=19, xlab="Reference", ylab="Exons (count)", xaxt="n", col=c("grey60","black","tan","darkred"))
+axis(1, at=1:4, labels=c("B6mm9","B6mm10","D2","AKRJ"))
+plot(annotationStats$Length_bp, pch=19, xlab="Reference", ylab="Length (bp)", xaxt="n", col=c("grey60","black","tan","darkred"))
+axis(1, at=1:4, labels=c("B6mm9","B6mm10","D2","AKRJ"))
+
+# size of B6 mm10 over each exome
+round(annotationStats["B6_mm10", "Length_bp"]/annotationStats$Length_bp, digits=1)
+```
+
+The B6 mm10 exome is bigger than B6 mm10, D2, and AKRJ, but the difference is reduced compared to assemblies size.
+
+## B6/D2 repartition
+
+```{r B6D2ratio_repartition}
+# plot B6 percentage and heterogenous percentage
+plot(t(B6D2ratio)[,c(1,3)], pch=19,
+     xlab="B6 genotypes (%)", ylab="heterogenous genotypes (%)")
+
+# display outliers
+kable(boxplot.stats(t(B6D2ratio)[,1])$out, caption="Outliers for B6 genotypes (%)")
+kable(boxplot.stats(t(B6D2ratio)[,3])$out, caption="Outliers for heterogenous genotypes (%)")
+
+# change the palette used to have color of labels that are readable
+palette(c("black", "skyblue", "green4", "orange2", "darkred", "darkviolet", "darkblue", "darkolivegreen2", "chocolate4","plum1"))
+```
+
+
+## Mapping Statistics
+
+```{r mappingStats}
+plot(map_B6mm10$Uniq, pch="")
+text(map_B6mm10$Uniq, labels=rownames(map_B6mm10))
+plot(map_B6mm9$Uniq, pch="")
+text(map_B6mm9$Uniq, labels=rownames(map_B6mm9))
+plot(map_D2$Uniq, pch="")
+text(map_D2$Uniq, labels=rownames(map_D2))
+
+
+# PCA
+PC_mapB6mm10 <- prcomp(t(map_B6mm10[,-1]))
+
+# plot the PCA results
+plot(PC_mapB6mm10$rotation[,"PC1"], PC_mapB6mm10$rotation[,"PC2"], main="PCA of mapping B6 mm10", xlab="PC1", ylab="PC2", pch="")
+text(PC_mapB6mm10$rotation[,"PC1"], PC_mapB6mm10$rotation[,"PC2"], labels=rownames(map_B6mm10), pos=2, offset=-2)
+boxplot.stats(PC_mapB6mm10$rotation[,"PC1"])$out
+boxplot.stats(PC_mapB6mm10$rotation[,"PC2"])$out
+
+# calculate the distance between samples
+distsL <- dist(map_B6mm10[,-1])
+
+# plot the distances into a heatmap and add a quick legend
+heatmap(as.matrix(distsL), main="Distance in mapping", symm=TRUE, margins=c(7, 7), labRow="", labCol="")
+legend("topright", legend=c("more similar","more distant"), horiz=FALSE, fill=heat.colors(2), title="Distance")
+```
+
+Clear separation between cortex and liver samples.
+
+### Uniquely mapping
+
+```{r UniquelyMapping}
+# Reference: B6 mm10
+# Uniquely mapped reads by condition
+plot(map_B6mm10$Uniq, pch=19, col=as.factor(uniqSra$condition), main="Reference: B6 mm10", xlab="Samples", ylab="Uniquely mapped reads (%)")
+legend("bottomleft", legend=levels(as.factor(uniqSra$condition)), fill=1:2)
+# Uniquely mapped reads by tissue
+plot(map_B6mm10$Uniq, pch=19, col=as.factor(uniqSra$tissue), main="Reference: B6 mm10", xlab="Samples", ylab="Uniquely mapped reads (%)")
+legend("bottomleft", legend=levels(as.factor(uniqSra$tissue)), fill=1:2)
+boxplot(map_B6mm10$Uniq~uniqSra$tissue, main="Reference: B6 mm10", ylab="Uniquely mapped reads (%)")
+
+# Reference: B6 mm9
+# Uniquely mapped reads by condition
+plot(map_B6mm9$Uniq, pch=19, col=as.factor(uniqSra$condition), main="Reference: B6 mm9", xlab="Samples", ylab="Uniquely mapped reads (%)")
+legend("bottomleft", legend=levels(as.factor(uniqSra$condition)), fill=1:2)
+# Uniquely mapped reads by tissue
+plot(map_B6mm9$Uniq, pch=19, col=as.factor(uniqSra$tissue), main="Reference: B6 mm9", xlab="Samples", ylab="Uniquely mapped reads (%)")
+legend("bottomleft", legend=levels(as.factor(uniqSra$tissue)), fill=1:2)
+boxplot(map_B6mm9$Uniq~uniqSra$tissue, main="Reference: B6 mm9", ylab="Uniquely mapped reads (%)")
+
+# Reference: D2
+# Uniquely mapped reads by condition
+plot(map_D2$Uniq, pch=19, col=as.factor(uniqSra$condition), main="Reference: D2", xlab="Samples", ylab="Uniquely mapped reads (%)")
+legend("bottomleft", legend=levels(as.factor(uniqSra$condition)), fill=1:2)
+# Uniquely mapped reads by tissue
+plot(map_D2$Uniq, pch=19, col=as.factor(uniqSra$tissue), main="Reference: D2", xlab="Samples", ylab="Uniquely mapped reads (%)")
+legend("bottomleft", legend=levels(as.factor(uniqSra$tissue)), fill=1:2)
+boxplot(map_D2$Uniq~uniqSra$tissue, main="Reference: D2", ylab="Uniquely mapped reads (%)")
+
+# Comparison B6 mm9, B6 mm10, D2
+plot(map_B6mm10$Uniq, pch=19, col="black", ylim=c(50,100), xlab="Samples", ylab="Uniquely mapped reads (%)")
+points(map_B6mm9$Uniq, pch=19, col="grey80")
+points(map_D2$Uniq, pch=19, col="tan")
+legend("bottomleft", legend=c("B6mm9","B6mm10","D2"), fill=c("grey60","black","tan"))
+
+plot("", las=2, xlim=c(0.5,3.5), ylim=c(50,100), xaxt="n", main="Mappability by reference", xlab="Reference", ylab="Uniquely mapped reads (%)")
+axis(1, at=1:3, labels=c("B6mm9","B6mm10","D2"))
+vioplot(map_B6mm9$Uniq, at=1, add=TRUE, col=c("grey80"), pchMed=20, wex=1)
+vioplot(map_B6mm10$Uniq, at=2, add=TRUE, col=c("grey40"), pchMed=20, wex=1)
+vioplot(map_D2$Uniq, at=3, add=TRUE, col=c("tan"), pchMed=20, wex=1)
+
+# mappability by reference in cortex
+plot("", las=2, xlim=c(0.5,3.5), ylim=c(70,100), xaxt="n", main="Mappability by reference in cortex", xlab="Reference", ylab="Uniquely mapped reads (%)")
+axis(1, at=1:3, labels=c("B6mm9","B6mm10","D2"))
+vioplot(map_B6mm9$Uniq[uniqSra$tissue=="Cortex"], at=1, add=TRUE, col=c("grey80"), pchMed=20, wex=1)
+vioplot(map_B6mm10$Uniq[uniqSra$tissue=="Cortex"], at=2, add=TRUE, col=c("grey40"), pchMed=20, wex=1)
+vioplot(map_D2$Uniq[uniqSra$tissue=="Cortex"], at=3, add=TRUE, col=c("tan"), pchMed=20, wex=1)
+
+# mappability by reference in liver
+plot("", las=2, xlim=c(0.5,3.5), ylim=c(55,90), xaxt="n", main="Mappability by reference in liver", xlab="Reference", ylab="Uniquely mapped reads (%)")
+axis(1, at=1:3, labels=c("B6mm9","B6mm10","D2"))
+vioplot(map_B6mm9$Uniq[uniqSra$tissue=="Liver"], at=1, add=TRUE, col=c("grey80"), pchMed=20, wex=1)
+vioplot(map_B6mm10$Uniq[uniqSra$tissue=="Liver"], at=2, add=TRUE, col=c("grey40"), pchMed=20, wex=1)
+vioplot(map_D2$Uniq[uniqSra$tissue=="Liver"], at=3, add=TRUE, col=c("tan"), pchMed=20, wex=1)
+
+# Difference in mappability by reference
+plot("", las=2, xlim=c(1,3), ylim=c(57,95), bty="l", xaxt="n", main="Difference in mappability by reference", xlab="Reference", ylab="Uniquely mapped reads (%)")
+axis(1, at=1:3, labels=c("B6mm9","B6mm10","D2"))
+segments(x0=rep(1,length(map_B6mm9$Uniq)), y0=map_B6mm9$Uniq, x1=rep(2,length(map_B6mm10$Uniq)), y1=map_B6mm10$Uniq,
+         col="grey90", lty = par("lty"), lwd = par("lwd"))
+segments(x0=rep(3,length(map_D2$Uniq)), y0=map_D2$Uniq, x1=rep(2,length(map_B6mm10$Uniq)), y1=map_B6mm10$Uniq,
+         col="wheat", lty = par("lty"), lwd = par("lwd"))
+points(rep(1,length(map_B6mm9$Uniq)),map_B6mm9$Uniq, pch=19, col="grey60")
+points(rep(2,length(map_B6mm10$Uniq)),map_B6mm10$Uniq, pch=19, col="grey20")
+points(rep(3,length(map_D2$Uniq)),map_D2$Uniq, pch=19, col="tan")
+
+# Difference in mappability by reference in cortex
+plot("", las=2, xlim=c(1,3), ylim=c(75,95), bty="l", xaxt="n", main="Difference in mappability by reference in cortex", xlab="Reference", ylab="Uniquely mapped reads (%)")
+axis(1, at=1:3, labels=c("B6mm9","B6mm10","D2"))
+segments(x0=rep(1,length(map_B6mm9$Uniq[uniqSra$tissue=="Cortex"])), y0=map_B6mm9$Uniq[uniqSra$tissue=="Cortex"], x1=rep(2,length(map_B6mm10$Uniq[uniqSra$tissue=="Cortex"])), y1=map_B6mm10$Uniq[uniqSra$tissue=="Cortex"],
+         col="grey90", lty = par("lty"), lwd = par("lwd"))
+segments(x0=rep(3,length(map_D2$Uniq[uniqSra$tissue=="Cortex"])), y0=map_D2$Uniq[uniqSra$tissue=="Cortex"], x1=rep(2,length(map_B6mm10$Uniq[uniqSra$tissue=="Cortex"])), y1=map_B6mm10$Uniq[uniqSra$tissue=="Cortex"],
+         col="wheat", lty = par("lty"), lwd = par("lwd"))
+points(rep(1,length(map_B6mm9$Uniq[uniqSra$tissue=="Cortex"])),map_B6mm9$Uniq[uniqSra$tissue=="Cortex"], pch=19, col="grey60")
+points(rep(2,length(map_B6mm10$Uniq[uniqSra$tissue=="Cortex"])),map_B6mm10$Uniq[uniqSra$tissue=="Cortex"], pch=19, col="grey20")
+points(rep(3,length(map_D2$Uniq[uniqSra$tissue=="Cortex"])),map_D2$Uniq[uniqSra$tissue=="Cortex"], pch=19, col="tan")
+
+# Difference in mappability by reference in liver
+plot("", las=2, xlim=c(1,3), ylim=c(55,85), bty="l", xaxt="n", main="Difference in mappability by reference in liver", xlab="Reference", ylab="Uniquely mapped reads (%)")
+axis(1, at=1:3, labels=c("B6mm9","B6mm10","D2"))
+segments(x0=rep(1,length(map_B6mm9$Uniq[uniqSra$tissue=="Liver"])), y0=map_B6mm9$Uniq[uniqSra$tissue=="Liver"], x1=rep(2,length(map_B6mm10$Uniq[uniqSra$tissue=="Liver"])), y1=map_B6mm10$Uniq[uniqSra$tissue=="Liver"],
+         col="grey90", lty = par("lty"), lwd = par("lwd"))
+segments(x0=rep(3,length(map_D2$Uniq[uniqSra$tissue=="Liver"])), y0=map_D2$Uniq[uniqSra$tissue=="Liver"], x1=rep(2,length(map_B6mm10$Uniq[uniqSra$tissue=="Liver"])), y1=map_B6mm10$Uniq[uniqSra$tissue=="Liver"],
+         col="wheat", lty = par("lty"), lwd = par("lwd"))
+points(rep(1,length(map_B6mm9$Uniq[uniqSra$tissue=="Liver"])),map_B6mm9$Uniq[uniqSra$tissue=="Liver"], pch=19, col="grey60")
+points(rep(2,length(map_B6mm10$Uniq[uniqSra$tissue=="Liver"])),map_B6mm10$Uniq[uniqSra$tissue=="Liver"], pch=19, col="grey20")
+points(rep(3,length(map_D2$Uniq[uniqSra$tissue=="Liver"])),map_D2$Uniq[uniqSra$tissue=="Liver"], pch=19, col="tan")
+
+```
+
+The samples map better on D2 reference than on B6. This is surprising because D2 genome assembly is based on B6.
+As expected for B6, samples map better on mm10 than on mm9.
+
+### Multiply mapping
+
+```{r MultiplyMapping}
+plot(map_B6mm10$Multi, pch=19, col=as.factor(uniqSra$condition), main="Reference: B6 mm10", xlab="Samples", ylab="Multiply mapped reads (%)")
+legend("topleft", legend=levels(as.factor(uniqSra$condition)), fill=1:2)
+plot(map_B6mm10$Multi, pch=19, col=as.factor(uniqSra$tissue), main="Reference: B6 mm10", xlab="Samples", ylab="Multiply mapped reads (%)")
+legend("topleft", legend=levels(as.factor(uniqSra$tissue)), fill=1:2)
+boxplot(map_B6mm10$Multi~uniqSra$tissue, main="Reference: B6 mm10", ylab="Multiply mapped reads (%)")
+
+plot(map_B6mm9$Multi, pch=19, col=as.factor(uniqSra$condition), main="Reference: B6 mm9", xlab="Samples", ylab="Multiply mapped reads (%)")
+legend("topleft", legend=levels(as.factor(uniqSra$condition)), fill=1:2)
+plot(map_B6mm9$Multi, pch=19, col=as.factor(uniqSra$tissue), main="Reference: B6 mm9", xlab="Samples", ylab="Multiply mapped reads (%)")
+legend("topleft", legend=levels(as.factor(uniqSra$tissue)), fill=1:2)
+boxplot(map_B6mm9$Multi~uniqSra$tissue, main="Reference: B6 mm9", ylab="Multiply mapped reads (%)")
+
+plot(map_D2$Multi, pch=19, col=as.factor(uniqSra$condition), main="Reference: D2", xlab="Samples", ylab="Multiply mapped reads (%)")
+legend("topleft", legend=levels(as.factor(uniqSra$condition)), fill=1:2)
+plot(map_D2$Multi, pch=19, col=as.factor(uniqSra$tissue), main="Reference: D2", xlab="Samples", ylab="Multiply mapped reads (%)")
+legend("topleft", legend=levels(as.factor(uniqSra$tissue)), fill=1:2)
+boxplot(map_D2$Multi~uniqSra$tissue, main="Reference: D2", ylab="Multiply mapped reads (%)")
+
+# comparison between references
+plot(map_B6mm10$Multi, pch=19, col="black", ylim=c(0,25), xlab="Samples", ylab="Multiply mapped reads (%)")
+points(map_B6mm9$Multi, pch=19, col="grey80")
+points(map_D2$Multi, pch=19, col="tan")
+
+
+plot("", las=2, xlim=c(0.5,3.5), ylim=c(0,25), xaxt="n", main="Mappability by reference", xlab="Reference", ylab="Multiply mapped reads (%)")
+axis(1, at=1:3, labels=c("B6mm9","B6mm10","D2"))
+vioplot(map_B6mm10$Multi, at=2, add=TRUE, col=c("grey40"), pchMed=20, wex=1)
+vioplot(map_B6mm9$Multi, at=1, add=TRUE, col=c("grey80"), pchMed=20, wex=1)
+vioplot(map_D2$Multi, at=3, add=TRUE, col=c("tan"), pchMed=20, wex=1)
+
+# mappability by reference in cortex
+plot("", las=2, xlim=c(0.5,3.5), ylim=c(0,15), xaxt="n", main="Mappability by reference in cortex", xlab="Reference", ylab="Multiply mapped reads (%)")
+axis(1, at=1:3, labels=c("B6mm9","B6mm10","D2"))
+vioplot(map_B6mm9$Multi[uniqSra$tissue=="Cortex"], at=1, add=TRUE, col=c("grey80"), pchMed=20, wex=1)
+vioplot(map_B6mm10$Multi[uniqSra$tissue=="Cortex"], at=2, add=TRUE, col=c("grey40"), pchMed=20, wex=1)
+vioplot(map_D2$Multi[uniqSra$tissue=="Cortex"], at=3, add=TRUE, col=c("tan"), pchMed=20, wex=1)
+
+# mappability by reference in liver
+plot("", las=2, xlim=c(0.5,3.5), ylim=c(5,25), xaxt="n", main="Mappability by reference in liver", xlab="Reference", ylab="Multiply mapped reads (%)")
+axis(1, at=1:3, labels=c("B6mm9","B6mm10","D2"))
+vioplot(map_B6mm9$Multi[uniqSra$tissue=="Liver"], at=1, add=TRUE, col=c("grey80"), pchMed=20, wex=1)
+vioplot(map_B6mm10$Multi[uniqSra$tissue=="Liver"], at=2, add=TRUE, col=c("grey40"), pchMed=20, wex=1)
+vioplot(map_D2$Multi[uniqSra$tissue=="Liver"], at=3, add=TRUE, col=c("tan"), pchMed=20, wex=1)
+
+# Difference in mappability by reference
+plot("", las=2, xlim=c(1,3), ylim=c(0,25), bty="l", xaxt="n", main="Difference in mappability by reference", xlab="Reference", ylab="Multiply mapped reads (%)")
+axis(1, at=1:3, labels=c("B6mm9","B6mm10","D2"))
+segments(x0=rep(1,length(map_B6mm9$Multi)), y0=map_B6mm9$Multi, x1=rep(2,length(map_B6mm10$Multi)), y1=map_B6mm10$Multi,
+         col="grey90", lty = par("lty"), lwd = par("lwd"))
+segments(x0=rep(3,length(map_D2$Multi)), y0=map_D2$Multi, x1=rep(2,length(map_B6mm10$Multi)), y1=map_B6mm10$Multi,
+         col="wheat", lty = par("lty"), lwd = par("lwd"))
+points(rep(1,length(map_B6mm9$Multi)),map_B6mm9$Multi, pch=19, col="grey60")
+points(rep(2,length(map_B6mm10$Multi)),map_B6mm10$Multi, pch=19, col="grey20")
+points(rep(3,length(map_D2$Multi)),map_D2$Multi, pch=19, col="tan")
+
+# Difference in mappability by reference in cortex
+plot("", las=2, xlim=c(1,3), ylim=c(0,15), bty="l", xaxt="n", main="Difference in mappability by reference in cortex", xlab="Reference", ylab="Multiply mapped reads (%)")
+axis(1, at=1:3, labels=c("B6mm9","B6mm10","D2"))
+segments(x0=rep(1,length(map_B6mm9$Multi[uniqSra$tissue=="Cortex"])), y0=map_B6mm9$Multi[uniqSra$tissue=="Cortex"], x1=rep(2,length(map_B6mm10$Multi[uniqSra$tissue=="Cortex"])), y1=map_B6mm10$Multi[uniqSra$tissue=="Cortex"],
+         col="grey90", lty = par("lty"), lwd = par("lwd"))
+segments(x0=rep(3,length(map_D2$Multi[uniqSra$tissue=="Cortex"])), y0=map_D2$Multi[uniqSra$tissue=="Cortex"], x1=rep(2,length(map_B6mm10$Multi[uniqSra$tissue=="Cortex"])), y1=map_B6mm10$Multi[uniqSra$tissue=="Cortex"],
+         col="wheat", lty = par("lty"), lwd = par("lwd"))
+points(rep(1,length(map_B6mm9$Multi[uniqSra$tissue=="Cortex"])),map_B6mm9$Multi[uniqSra$tissue=="Cortex"], pch=19, col="grey60")
+points(rep(2,length(map_B6mm10$Multi[uniqSra$tissue=="Cortex"])),map_B6mm10$Multi[uniqSra$tissue=="Cortex"], pch=19, col="grey20")
+points(rep(3,length(map_D2$Multi[uniqSra$tissue=="Cortex"])),map_D2$Multi[uniqSra$tissue=="Cortex"], pch=19, col="tan")
+
+# Difference in mappability by reference in liver
+plot("", las=2, xlim=c(1,3), ylim=c(5,25), bty="l", xaxt="n", main="Difference in mappability by reference in liver", xlab="Reference", ylab="Multiply mapped reads (%)")
+axis(1, at=1:3, labels=c("B6mm9","B6mm10","D2"))
+segments(x0=rep(1,length(map_B6mm9$Multi[uniqSra$tissue=="Liver"])), y0=map_B6mm9$Multi[uniqSra$tissue=="Liver"], x1=rep(2,length(map_B6mm10$Multi[uniqSra$tissue=="Liver"])), y1=map_B6mm10$Multi[uniqSra$tissue=="Liver"],
+         col="grey90", lty = par("lty"), lwd = par("lwd"))
+segments(x0=rep(3,length(map_D2$Multi[uniqSra$tissue=="Liver"])), y0=map_D2$Multi[uniqSra$tissue=="Liver"], x1=rep(2,length(map_B6mm10$Multi[uniqSra$tissue=="Liver"])), y1=map_B6mm10$Multi[uniqSra$tissue=="Liver"],
+         col="wheat", lty = par("lty"), lwd = par("lwd"))
+points(rep(1,length(map_B6mm9$Multi[uniqSra$tissue=="Liver"])),map_B6mm9$Multi[uniqSra$tissue=="Liver"], pch=19, col="grey60")
+points(rep(2,length(map_B6mm10$Multi[uniqSra$tissue=="Liver"])),map_B6mm10$Multi[uniqSra$tissue=="Liver"], pch=19, col="grey20")
+points(rep(3,length(map_D2$Multi[uniqSra$tissue=="Liver"])),map_D2$Multi[uniqSra$tissue=="Liver"], pch=19, col="tan")
+
+```
+
+The condition (SD or NSD) has no major influence.
+
+### Parental samples
+
+Focusing on parent strains in control condition (NSD) to assess more individually the mapping of these samples. Using AKRJ reference as a negative control to check Ioannis hypothesis that samples maps better on D2 because D2 genome is of better quality than B6 because in the mouse genome project they did some Sanger sequencing (longer reads than only illumina sequencing).
+
+```{r ParentalUniquely}
+
+# Get sample name (GSM...) of parent strains in NSD condition
+B6L <- unique(sratable$Sample_Name[sratable$genotype=="C57BL/6J"&sratable$tissue=="Liver"&sratable$condition=="Control"])
+B6C <- unique(sratable$Sample_Name[sratable$genotype=="C57BL/6J"&sratable$tissue=="Cortex"&sratable$condition=="Control"])
+D2L <- unique(sratable$Sample_Name[sratable$genotype=="DBA/2J"&sratable$tissue=="Liver"&sratable$condition=="Control"])
+D2C <- unique(sratable$Sample_Name[sratable$genotype=="DBA/2J"&sratable$tissue=="Cortex"&sratable$condition=="Control"])
+
+# Difference in mappability by reference for uniquely mapped reads
+# in liver
+plot("", las=2, xlim=c(1,4), ylim=c(63,82), bty="l", xaxt="n", main="Difference in mappability by reference for parental strains in liver", xlab="Reference", ylab="Uniquely mapped reads (%)")
+axis(1, at=1:4, labels=c("B6mm9","B6mm10","D2", "AKRJ"))
+segments(x0=rep(1,4), y0=map_B6mm9[c(B6L,D2L),"Uniq"], x1=rep(2,4), y1=map_B6mm10[c(B6L,D2L),"Uniq"],
+         col=c("grey90","grey90","wheat","wheat"), lty = par("lty"), lwd = par("lwd"))
+segments(x0=rep(3,4), y0=map_D2[c(B6L,D2L),"Uniq"], x1=rep(2,4), y1=map_B6mm10[c(B6L,D2L),"Uniq"],
+         col=c("grey90","grey90","wheat","wheat"), lty = par("lty"), lwd = par("lwd"))
+segments(x0=rep(3,4), y0=map_D2[c(B6L,D2L),"Uniq"], x1=rep(4,4), y1=map_AKRJ[c(B6L,D2L),"Uniq"],
+         col=c("grey90","grey90","wheat","wheat"), lty = par("lty"), lwd = par("lwd"))
+points(rep(1,4),map_B6mm9[c(B6L,D2L),"Uniq"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+points(rep(2,4),map_B6mm10[c(B6L,D2L),"Uniq"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+points(rep(3,4),map_D2[c(B6L,D2L),"Uniq"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+points(rep(4,4),map_AKRJ[c(B6L,D2L),"Uniq"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+
+# in cortex
+plot("", las=2, xlim=c(1,4), ylim=c(80,92), bty="l", xaxt="n", main="Difference in mappability by reference for parental strains in cortex", xlab="Reference", ylab="Uniquely mapped reads (%)")
+axis(1, at=1:4, labels=c("B6mm9","B6mm10","D2", "AKRJ"))
+segments(x0=rep(1,4), y0=map_B6mm9[c(B6C,D2C),"Uniq"], x1=rep(2,4), y1=map_B6mm10[c(B6C,D2C),"Uniq"],
+         col=c("grey90","grey90","wheat","wheat"), lty = par("lty"), lwd = par("lwd"))
+segments(x0=rep(3,4), y0=map_D2[c(B6C,D2C),"Uniq"], x1=rep(2,4), y1=map_B6mm10[c(B6C,D2C),"Uniq"],
+         col=c("grey90","grey90","wheat","wheat"), lty = par("lty"), lwd = par("lwd"))
+segments(x0=rep(3,4), y0=map_D2[c(B6C,D2C),"Uniq"], x1=rep(4,4), y1=map_AKRJ[c(B6C,D2C),"Uniq"],
+         col=c("grey90","grey90","wheat","wheat"), lty = par("lty"), lwd = par("lwd"))
+points(rep(1,4),map_B6mm9[c(B6C,D2C),"Uniq"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+points(rep(2,4),map_B6mm10[c(B6C,D2C),"Uniq"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+points(rep(3,4),map_D2[c(B6C,D2C),"Uniq"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+points(rep(4,4),map_AKRJ[c(B6C,D2C),"Uniq"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+
+```
+
+```{r ParentalMultiply}
+
+# Difference in mappability by reference for multiply mapped reads
+# in liver
+plot("", las=2, xlim=c(1,4), ylim=c(7,20), bty="l", xaxt="n", main="Difference in mappability by reference for parental strains in liver", xlab="Reference", ylab="Multiply mapped reads (%)")
+axis(1, at=1:4, labels=c("B6mm9","B6mm10","D2", "AKRJ"))
+segments(x0=rep(1,4), y0=map_B6mm9[c(B6L,D2L),"Multi"], x1=rep(2,4), y1=map_B6mm10[c(B6L,D2L),"Multi"],
+         col=c("grey90","grey90","wheat","wheat"), lty = par("lty"), lwd = par("lwd"))
+segments(x0=rep(3,4), y0=map_D2[c(B6L,D2L),"Multi"], x1=rep(2,4), y1=map_B6mm10[c(B6L,D2L),"Multi"],
+         col=c("grey90","grey90","wheat","wheat"), lty = par("lty"), lwd = par("lwd"))
+segments(x0=rep(3,4), y0=map_D2[c(B6L,D2L),"Multi"], x1=rep(4,4), y1=map_AKRJ[c(B6L,D2L),"Multi"],
+         col=c("grey90","grey90","wheat","wheat"), lty = par("lty"), lwd = par("lwd"))
+points(rep(1,4),map_B6mm9[c(B6L,D2L),"Multi"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+points(rep(2,4),map_B6mm10[c(B6L,D2L),"Multi"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+points(rep(3,4),map_D2[c(B6L,D2L),"Multi"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+points(rep(4,4),map_AKRJ[c(B6L,D2L),"Multi"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+
+# in cortex
+plot("", las=2, xlim=c(1,4), ylim=c(1,9), bty="l", xaxt="n", main="Difference in mappability by reference for parental strains in cortex", xlab="Reference", ylab="Multiply mapped reads (%)")
+axis(1, at=1:4, labels=c("B6mm9","B6mm10","D2", "AKRJ"))
+segments(x0=rep(1,4), y0=map_B6mm9[c(B6C,D2C),"Multi"], x1=rep(2,4), y1=map_B6mm10[c(B6C,D2C),"Multi"],
+         col=c("grey90","grey90","wheat","wheat"), lty = par("lty"), lwd = par("lwd"))
+segments(x0=rep(3,4), y0=map_D2[c(B6C,D2C),"Multi"], x1=rep(2,4), y1=map_B6mm10[c(B6C,D2C),"Multi"],
+         col=c("grey90","grey90","wheat","wheat"), lty = par("lty"), lwd = par("lwd"))
+segments(x0=rep(3,4), y0=map_D2[c(B6C,D2C),"Multi"], x1=rep(4,4), y1=map_AKRJ[c(B6C,D2C),"Multi"],
+         col=c("grey90","grey90","wheat","wheat"), lty = par("lty"), lwd = par("lwd"))
+points(rep(1,4),map_B6mm9[c(B6C,D2C),"Multi"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+points(rep(2,4),map_B6mm10[c(B6C,D2C),"Multi"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+points(rep(3,4),map_D2[c(B6C,D2C),"Multi"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+points(rep(4,4),map_AKRJ[c(B6C,D2C),"Multi"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+```
+
+```{r ParentalUnmapped}
+
+# Difference in mappability by reference for unmapped mapped reads
+# in liver
+plot("", las=2, xlim=c(1,4), ylim=c(7,20), bty="l", xaxt="n", main="Difference in mappability by reference for parental strains in liver", xlab="Reference", ylab="Unmapped reads (%)")
+axis(1, at=1:4, labels=c("B6mm9","B6mm10","D2", "AKRJ"))
+segments(x0=rep(1,4), y0=map_B6mm9[c(B6L,D2L),"Unmapped"], x1=rep(2,4), y1=map_B6mm10[c(B6L,D2L),"Unmapped"],
+         col=c("grey90","grey90","wheat","wheat"), lty = par("lty"), lwd = par("lwd"))
+segments(x0=rep(3,4), y0=map_D2[c(B6L,D2L),"Unmapped"], x1=rep(2,4), y1=map_B6mm10[c(B6L,D2L),"Unmapped"],
+         col=c("grey90","grey90","wheat","wheat"), lty = par("lty"), lwd = par("lwd"))
+segments(x0=rep(3,4), y0=map_D2[c(B6L,D2L),"Unmapped"], x1=rep(4,4), y1=map_AKRJ[c(B6L,D2L),"Unmapped"],
+         col=c("grey90","grey90","wheat","wheat"), lty = par("lty"), lwd = par("lwd"))
+points(rep(1,4),map_B6mm9[c(B6L,D2L),"Unmapped"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+points(rep(2,4),map_B6mm10[c(B6L,D2L),"Unmapped"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+points(rep(3,4),map_D2[c(B6L,D2L),"Unmapped"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+points(rep(4,4),map_AKRJ[c(B6L,D2L),"Unmapped"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+
+# in cortex
+plot("", las=2, xlim=c(1,4), ylim=c(3,14), bty="l", xaxt="n", main="Difference in mappability by reference for parental strains in cortex", xlab="Reference", ylab="Unmapped reads (%)")
+axis(1, at=1:4, labels=c("B6mm9","B6mm10","D2", "AKRJ"))
+segments(x0=rep(1,4), y0=map_B6mm9[c(B6C,D2C),"Unmapped"], x1=rep(2,4), y1=map_B6mm10[c(B6C,D2C),"Unmapped"],
+         col=c("grey90","grey90","wheat","wheat"), lty = par("lty"), lwd = par("lwd"))
+segments(x0=rep(3,4), y0=map_D2[c(B6C,D2C),"Unmapped"], x1=rep(2,4), y1=map_B6mm10[c(B6C,D2C),"Unmapped"],
+         col=c("grey90","grey90","wheat","wheat"), lty = par("lty"), lwd = par("lwd"))
+segments(x0=rep(3,4), y0=map_D2[c(B6C,D2C),"Unmapped"], x1=rep(4,4), y1=map_AKRJ[c(B6C,D2C),"Unmapped"],
+         col=c("grey90","grey90","wheat","wheat"), lty = par("lty"), lwd = par("lwd"))
+points(rep(1,4),map_B6mm9[c(B6C,D2C),"Unmapped"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+points(rep(2,4),map_B6mm10[c(B6C,D2C),"Unmapped"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+points(rep(3,4),map_D2[c(B6C,D2C),"Unmapped"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+points(rep(4,4),map_AKRJ[c(B6C,D2C),"Unmapped"], pch=19, cex=0.7, col=c("grey20","grey20","tan","tan"))
+
+```
+
+I conclude that:
+
+* There is a mapping bias for assemblies from genome mouse project compared to B6 assemblies.
+* It seems that the mapping error are quite frequent.
+
+## Mapping vs genotype
+
+Check if the genotype ratio of B6/D2 per line correlates with the ratio of mapping on B6/D2
+
+```{r, eval=FALSE, include=FALSE}
+all(rownames(map_B6mm10)==uniqSra$Sample_Name)
+
+mymapstat <- "Uniq"
+##mytissue <- "Cortex"
+##mycondition <- "Control"
+
+
+for(mytissue in levels(as.factor(uniqSra$tissue))){
+    print(mytissue)
+  for(mycondition in levels(as.factor(uniqSra$condition))){
+    ##map_B6mm10$Sample_Name[uniqSra$tissue==mytissue]
+    ##uniqSra$genotype[uniqSra$tissue==mytissue&uniqSra$condition==mycondition]
+    ct <- uniqSra$condition==mycondition&uniqSra$tissue==mytissue
+    genotype_ratio <- t(B6D2ratio)[,1]/t(B6D2ratio)[,2]
+    map_ratio <- map_B6mm10[ct,mymapstat]/map_D2[ct,mymapstat]  
+    idx <- match(colnames(B6D2ratio),uniqSra$genotype[ct])
+    na.omit(match(MouseLines$V1[match(uniqSra$genotype[uniqSra$tissue==mytissue&uniqSra$condition==mycondition],MouseLines$V2)],colnames(B6D2ratio)))
+    
+    print(idx)
+    plot(genotype_ratio,map_ratio, pch=20, main=paste(mytissue, mycondition, mymapstat), xlab="Genotype ratio", ylab="Mapping ratio")
+  }
+}
+### NOT WORKING
+```
+
+## Mapping differences
+
+Which reads map on one reference but not the other.
+
+!Still in progress!
+
+Most of the reads that map uniquely on one reference also map uniquely to the other reference. This is expected.
+
+TODO
+- export sam file uniq D2, uniq B6 or the 8 parental control samples
+- boxplot/histogram by chromosome?
+=> from a separated R script (risk to be quite heavy)
+
+
+# Next?
+
+## Characterize bias?
+
+I may try to better characterize this bias.
+
+* B6/D2 ratio of genotype, explore different ways of calculating the ratio, check how exactly the genotyping was done. Could there be error(s)/bias induced at this step.
+* Unmapped vs mapped => regions (chromosome) bias? position (junction, exons) bias?
+* Is it dependent of the 2-pass mapping or not => check 1-pass stats to see that?
+
+## SNP-aware RNA-mapping?
+
+Mapping to 1 reference or more individually may not be the best way to deal with this challenge. SNP aware mapping may be an option worth trying.
+- https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3739924/ Allelic imbalance metre (Allim), a new tool for measuring allele-specific gene expression with RNA-seq data, 2013 (I think it uses parental RNA-seq to build diploid genome as reference, but requires polymorphisms as input)
+- https://academic.oup.com/nar/article/42/W1/W494/2436016 mrsFAST-Ultra: a compact, SNP-aware mapper for high performance sequencing applications, 2014
+- https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5051939/ AlignerBoost: A Generalized Software Toolkit for Boosting Next-Gen Sequencing Mapping Accuracy Using a Bayesian-Based Mapping Quality Framework, 2016 (SNP-aware if providing SNP list)
+- https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5905663/ ASElux: an ultra-fast and accurate allelic reads counter, 2018 (I think it uses unmapped reads to estimate allele-specific bias)
+
+(And it would be even better to have SV aware or more generally structural variation aware mapping for BXD lines)
+But I don't know how feasible this option is?

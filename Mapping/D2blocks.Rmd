@@ -1,0 +1,90 @@
+---
+title: "D2 blocks"
+author: "Nastassia Gobet"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    code_folding: hide
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    df_print: paged
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, fig.path="Graphs/D2blocks/", warning=TRUE)
+
+#load needed libraries
+library(knitr)
+library(vioplot)
+
+# set working directory
+##setwd("F:/BXD/analysis/Mapping")
+```
+
+# Goal
+
+Visualise D2 blocks in BXD lines.
+
+# Visualisation {.tabset}
+
+```{r}
+# create a function that plots D2 blocks for a BXD line
+plotD2blocks <- function(BXDline){
+  # get D2 blocks genomic positions
+  blocks <- read.table(paste0("F:/BXD/data/genome/", BXDline, "_D2blocks.bed"), header=TRUE, stringsAsFactors=FALSE)
+  chromosome_labels <- unique(blocks$chrom)
+  blocks$chrom <- as.numeric(gsub("X", "20", blocks$chrom))
+
+  # get chromosome total length
+  length <- read.table(paste0("F:/BXD/data/PersonalizedReferences/", BXDline, "_nonrandomized_genotypesandimputed/star_paternal_withoutannotation/chrNameLength.txt"), header=FALSE, stringsAsFactors=FALSE)
+  colnames(length) <- c("chrom", "length")
+  orderedlengths <- length$length[match(paste0(chromosome_labels, "_paternal"), length$chrom)]
+
+  # plot
+  plot(blocks$chrom, blocks$chromEnd, pch="", main=BXDline, xaxt="n", xlab="Chromosome", ylab="genomic positions", bty="l", ylim=c(0, max(orderedlengths)))
+  axis(side=1, at=1:20, labels=chromosome_labels)
+  rect(blocks$chrom-0.2, blocks$chromStart, blocks$chrom+0.2, blocks$chromEnd, col="tan", border="tan")
+  rect(unique(blocks$chrom)-0.2, 0, unique(blocks$chrom)+0.2, orderedlengths, col=NA, border="black")
+}
+```
+
+```{r D2blocks, fig.width=8, results='asis'}
+# get list of BXD lines
+BXDlines <- gsub(pattern="_D2blocks.bed", replacement="", list.files(path="F:/BXD/data/genome", pattern="D2blocks"))
+# order names
+BXDlines_ordered <- BXDlines[sort(as.numeric(gsub(pattern="BXD", replacement="", BXDlines)), index.return=TRUE)$ix]
+
+# plot for each BXD line
+for(l in BXDlines_ordered){
+  # generate the header
+  cat(paste0("\n\n## ", l, "\n"))
+  plotD2blocks(l)
+}
+```
+
+For visualisation purposes, the tickness of variants is not scaled compared to the chromosome size.
+
+# Observations
+
+* On average 53 D2 blocks per BXD line.
+* BXD100 has many chromosomes without D2 blocks.
+* BXD51 has no D2 block on chromosome 14.
+* BXD61 and BXD83 have no D2 block on chromosome 17.
+* BXD90 has no D2 block on chromosome 8.
+* BXD97 has no D2 block on chromosome 16.
+
+# Session information
+
+```{r}
+sessionInfo()
+```
+

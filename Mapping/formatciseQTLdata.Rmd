@@ -1,0 +1,128 @@
+---
+title: "format cis-eQTL data"
+author: "Nastassia Gobet"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    code_folding: hide
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    df_print: paged
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, warning=TRUE)
+
+#load needed libraries
+library(knitr)
+
+# set working directory
+##setwd("F:/BXD/analysis/Mapping")
+```
+
+# Goal
+
+Format cis-eQTL data from FastQTL:
+
+* group adjusted values from qvalue and direct output from FastQTL
+* give names to variables
+
+
+# info from FastQTL
+
+FastQTL output (http://fastqtl.sourceforge.net/):
+
+* rowname = ID molecular phenotype (gene)
+* V2 = number of variant tested
+* V3 = MLE of shape 1 parameter of beta distribution
+* V4 = MLE of shape 2 parameters of beta distribution
+* V5 = to be described (not explained on FastQTL website)
+* V6 = ID of best variant
+* V7 = distance between variant and molecular phenotype
+* V8 = p-value of association between variant and molecular phenotype
+* V9 = slope of regression
+* V10 = first permutation p-value accounting for multiple variants tested by molecular phenotype
+* V11 = second permutation p-value obtained with beta approximation (recommended to use this one)
+
+
+# info from qvalue R package
+
+Output as 2 columns
+
+* adjustedpvalue is the qvalue
+* marker is the ID of the marker
+
+
+# Loading 
+
+```{r retrieveeQTLresults}
+# retrieve eQTL results
+for(tissue in c("Cortex", "Liver")){
+  t <- unlist(strsplit(tissue, split=""))[1]
+  for(condition in c("NSD", "SD")){
+    assign(paste0("dataB6", t, condition), read.table(paste0("F:/BXD/data/transcriptome/eQTL_B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_", tissue, "_", condition, "_pvalcorrected.txt"), row.names=1, stringsAsFactors=FALSE))
+    assign(paste0("dataB6full", t, condition), read.table(paste0("F:/BXD/data/transcriptome/eQTL_B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_", tissue, "_", condition, ".txt"), row.names=1, stringsAsFactors=FALSE))
+    assign(paste0("dataBXD", t, condition), read.table(paste0("F:/BXD/data/transcriptome/eQTL_BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_", tissue, "_", condition,"_pvalcorrected.txt"), row.names=1, stringsAsFactors=FALSE))
+    assign(paste0("dataBXDfull", t, condition), read.table(paste0("F:/BXD/data/transcriptome/eQTL_BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_", tissue, "_", condition, ".txt"), row.names=1, stringsAsFactors=FALSE))
+  }
+}
+```
+
+
+# Formatting
+
+```{r}
+# create function to group and clean data
+formatciseQTL <- function(tissue, condition){
+  # get data from FastQTL and qvalue
+  t <- unlist(strsplit(tissue, split=""))[1]
+  dataB6full <- eval(parse(text=paste0("dataB6full", t, condition)))
+  dataB6 <- eval(parse(text=paste0("dataB6", t, condition)))
+  dataBXDfull <- eval(parse(text=paste0("dataBXDfull", t, condition)))
+  dataBXD <- eval(parse(text=paste0("dataBXD", t, condition)))
+
+  # check compability of number of genes (rows)
+  ifelse(nrow(dataB6)==nrow(dataB6full) & nrow(dataBXD)==nrow(dataBXDfull), "Same number of genes", "Different number of genes!")
+
+  # join FastQTL statistics and q-values, remove the IDvariant column from FastQTL because redundant with marker
+  eQTLB6 <- cbind(dataB6full[, -5], dataB6)
+  eQTLBXD <- cbind(dataBXDfull[, -5], dataBXD)
+
+  # define colnames
+  colnames(eQTLB6) <- c("nb_variants_tested", "MLE1_beta", "MLE2_beta", "TBD", "distance", "pvalue", "slope", "pvalue_firstpermutation", "pvalue_secondpermutation", "adjustedpvalue", "marker")
+  colnames(eQTLBXD) <- c("nb_variants_tested", "MLE1_beta", "MLE2_beta", "TBD", "distance", "pvalue", "slope", "pvalue_firstpermutation", "pvalue_secondpermutation", "adjustedpvalue", "marker")
+  
+  # save as tab-separated tables
+  write.table(eQTLB6, file=paste0("F:/BXD/data/transcriptome/eQTL_B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_", tissue, "_", condition, "_grouped.tab"), row.names=TRUE, sep="\t", quote=FALSE)
+  write.table(eQTLBXD, file=paste0("F:/BXD/data/transcriptome/eQTL_BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_", tissue, "_", condition, "_grouped.tab"), row.names=TRUE, sep="\t", quote=FALSE)
+}
+
+# vectorize function
+formatciseQTL <- Vectorize(formatciseQTL)
+
+# apply to tissues and conditions
+tissues <- c("Cortex", "Liver")
+conditions <- c("NSD", "SD")
+invisible(formatciseQTL(tissue=rep(tissues, times=2), condition=rep(conditions, each=2)))
+```
+
+
+# Session information
+
+```{r}
+sessionInfo()
+```
+
+
+
+
+

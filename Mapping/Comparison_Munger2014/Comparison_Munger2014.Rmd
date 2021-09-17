@@ -1,0 +1,255 @@
+---
+title: "Comparison with Munger 2014"
+author: "Nastassia Gobet"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    keep_md: no
+    code_folding: hide
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    df_print: paged
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, fig.path="Graphs/", warning=TRUE)
+
+# load libraries
+library(compiler)
+library(magrittr)
+library(tools)
+library(htmltools)
+library(Rcpp)
+library(stringi)
+library(rmarkdown)
+library(stringr)
+library(xfun)
+library(digest)
+library(rlang)
+library(evaluate)
+library(yaml)
+library(knitr)
+
+library(VennDiagram)
+library(grid)
+
+# set working directory
+##setwd("F:/BXD/analysis/Mapping/Comparison_Munger2014")
+```
+
+# GOAL
+
+The goal is to compare some aspects of our BXD mapping study with the diversity outbred (DO) study (Munger 2014). Both studies both use individualized strain references in mouse to improve RNA-seq analysis up to eQTL detection.
+
+The paper is: Munger, S. C.; Raghupathy, N.; Choi, K.; Simons, A. K.; Gatti, D. M.; Hinerfeld, D. A.; Svenson, K. L.; Keller, M. P.; Attie, A. D.; Hibbs, M. A.; Graber, J. H.; Chesler, E. J.; Churchill, G. A. RNA-Seq Alignment to Individualized Genomes Improves Transcript Abundance Estimates in Multiparent Populations. Genetics 2014, 198 (1), 59–73. https://doi.org/10.1534/genetics.114.165886.
+
+```{r StudyAnalysesDesign, echo=FALSE, fig.cap="Comparaison of study and analyses design", out.width = '75%'}
+knitr::include_graphics("Graphs/TableStudyDesignComparison.png")
+```
+
+Comparisons of analyses:
+
+* Number of variants per reference (cf Table 1 in Munger 2014)
+* Gene expression on standard or individualized reference (cf Figure 3 C & D in Munger 2014)
+* eQTL scores on standard or individualized reference (cf Figure 4 B in Munger 2014)
+
+# Analysis
+
+## Variants
+
+```{bash VariantsCounting, eval=FALSE, include=FALSE}
+# get list of BXD lines
+BXDlines=( $(ls data/PersonalizedReferences/BXD*_nonrandomized_genotypesandimputed/vcf2diploid.out | grep -o "BXD[0-9]\{2,3\}") )
+
+# print header
+echo -e "BXDline\tvariants\tbases" > data/PersonalizedReferences/ModificationPerReferences_BXDlines_genotypesandimputed.tab
+
+for line in "${BXDlines[@]}"
+do
+  # count number of variants
+  nb_variants=$(grep "paternal" data/PersonalizedReferences/$line\_nonrandomized_genotypesandimputed/vcf2diploid.out | cut -d " " -f 2 | paste -sd+ -| bc)
+  # count number of bases affected
+  nb_bases=$(grep "paternal" data/PersonalizedReferences/$line\_nonrandomized_genotypesandimputed/vcf2diploid.out | cut -d " " -f 4 | paste -sd+ -| bc)
+  # print values to output file
+  echo -e "$line\t$nb_variants\t$nb_bases" >> data/PersonalizedReferences/ModificationPerReferences_BXDlines_genotypesandimputed.tab
+done
+
+# count for D2
+# output headers
+echo -e "line\tvariants\tbases" > data/PersonalizedReferences/ModificationPerReferences_D2_indelsSNVs.tab
+# count variants
+nb_variants=$(grep "paternal" data/PersonalizedReferences/DBA_2J_nonrandomized_indelsSNVs/vcf2diploid.out | cut -d " " -f 2 | paste -sd+ -| bc)
+# count number of bases affected
+nb_bases=$(grep "paternal" data/PersonalizedReferences/DBA_2J_nonrandomized_indelsSNVs/vcf2diploid.out | cut -d " " -f 4 | paste -sd+ -| bc)
+# print values to output file
+echo -e "D2\t$nb_variants\t$nb_bases" >> data/PersonalizedReferences/ModificationPerReferences_D2_indelsSNVs.tab
+```
+
+```{r Variants}
+VariantsBXD <- read.table("F:/BXD/data/PersonalizedReferences/ModificationPerReferences_BXDlines_genotypesandimputed.tab", stringsAsFactors=FALSE, header=TRUE, row.names="BXDline")
+VariantsBXD
+plot(VariantsBXD, pch=19, xlim=c(0, max(VariantsBXD$variants)), ylim=c(0, max(VariantsBXD$bases)), las=1)
+abline(a=0, b=1, lty=2)
+
+VariantsD2 <- read.table("F:/BXD/data/PersonalizedReferences/ModificationPerReferences_D2_indelsSNVs.tab", stringsAsFactors=FALSE, header=TRUE, row.names="line")
+VariantsD2
+```
+
+In the BXD, the number of variants and bases affected are proportional. BXD100 has less than the other lines.
+
+```{r Table1, echo=FALSE, fig.cap="Table (Munger 2014)", out.width = '100%'}
+knitr::include_graphics("Graphs/Munger2014_Table1.png")
+```
+
+In the DO study they have less variants in the genome (~ 5 millions per strain laboratory-derived, more for wild-deried strains), whereas it is more than D2 (~ 6 millions. However, in the BXD study we consider only homozygous variants but no quality filtered of variants.
+
+## Gene expression
+
+In the BXD study, the gene expression are with permissive mapping setting (up to 10 mismatches, trimming, splicing, with transcriptome annotation) 
+
+```{r GeneExpression, fig.width=10}
+# load B6 aligned gene expression
+geneExpressionB6_CNSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Cortex_NSD.tab", stringsAsFactors=TRUE, header=TRUE, row.names=1)
+geneExpressionB6_CSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Cortex_SD.tab", stringsAsFactors=TRUE, header=TRUE, row.names=1)
+geneExpressionB6_LNSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Liver_NSD.tab", stringsAsFactors=TRUE, header=TRUE, row.names=1)
+geneExpressionB6_LSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Liver_SD.tab", stringsAsFactors=TRUE, header=TRUE, row.names=1)
+
+# load BXD aligned gene expression
+geneExpressionBXD_CNSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/MappingParametersOptimization/genotypesandimputed_withannotation_Local_1_10/TMMnormalized_log2CPM_Cortex_NSD.tab", stringsAsFactors=TRUE, header=TRUE, row.names=1)
+geneExpressionBXD_CSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/MappingParametersOptimization/genotypesandimputed_withannotation_Local_1_10/TMMnormalized_log2CPM_Cortex_SD.tab", stringsAsFactors=TRUE, header=TRUE, row.names=1)
+geneExpressionBXD_LNSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/MappingParametersOptimization/genotypesandimputed_withannotation_Local_1_10/TMMnormalized_log2CPM_Liver_NSD.tab", stringsAsFactors=TRUE, header=TRUE, row.names=1)
+geneExpressionBXD_LSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/MappingParametersOptimization/genotypesandimputed_withannotation_Local_1_10/TMMnormalized_log2CPM_Liver_SD.tab", stringsAsFactors=TRUE, header=TRUE, row.names=1)
+
+# create a function to compare and plot BXD vs B6 gene expression
+compareGeneExpressionBXDvsB6 <- function(geneExpressionBXD, geneExpressionB6, name){
+  # find common gene names
+  commongenes <- intersect(rownames(geneExpressionBXD), rownames(geneExpressionB6))
+  
+  # take mean value by gene
+  varBXD <- apply(geneExpressionBXD[commongenes, ], MARGIN=1, FUN=mean)
+  varB6 <- apply(geneExpressionB6[commongenes, ], MARGIN=1, FUN=mean)
+  
+  # simple plot
+  par(mfrow=c(1,2))
+  plot(varB6, varBXD, pch=19, col=rgb(0,0,0,0.1), las=1, main=name, xlab="aligned to B6", ylab="aligned to BXD")
+  abline(a=0, b=1, lty=2)
+  
+  # define variables to highlight difference
+  var_diff <- varBXD - varB6
+  var_mean <- (varBXD + varB6) / 2
+  
+  # histogram of difference
+  hist(abs(var_diff/max(abs(var_diff)))*100, main=name, xlab="Percentage of difference in log2CPM expression:", breaks=50, las=1)
+  mtext(text="abs(BXD - B6) / max(abs(BXD - B6)) * 100", side=1, line=4)
+  ##hist(var_diff, main=name, xlab="Difference in log2CPM expression: BXD - B6", breaks=50, las=1)
+  
+  # MA plot
+  par(mfrow=c(1,1))
+  plot(var_mean, var_diff, pch="", las=1, main=name, xlab="Mean in log2CPM expression: (BXD + B6) / 2", ylab="Difference in log2CPM expression: BXD - B6")
+  abline(h=0, lty=2)
+  points(var_mean, var_diff, pch=19, col=densCols(var_mean, var_diff, nbin=128))
+  # legend
+  ##rect(12, seq(0.5, 4.5, length=9), 13,  seq(0.5, 4.5, length=9)+0.5, border=NA, col=blues9)
+  ##text(13,  seq(0.5, 4.5, length=9)+0.25, labels=1:9, pos=4)
+  ##rect(12, 0.5, 14, 5)
+}
+
+compareGeneExpressionBXDvsB6(geneExpressionBXD_CNSD, geneExpressionB6_CNSD, "Cortex_NSD")
+compareGeneExpressionBXDvsB6(geneExpressionBXD_CSD, geneExpressionB6_CSD, "Cortex_SD")
+compareGeneExpressionBXDvsB6(geneExpressionBXD_LNSD, geneExpressionB6_LNSD, "Liver_NSD")
+compareGeneExpressionBXDvsB6(geneExpressionBXD_LSD, geneExpressionB6_LSD, "Liver_SD")
+```
+
+```{r Figure3CD, echo=FALSE, fig.cap="Figure 3 C & D (Munger 2014)", out.width = '100%'}
+knitr::include_graphics("Graphs/Munger2014_Figure3CD.png")
+```
+
+The gene expression in the DO study seem more affected by the use of individualized references than in the BXD study.
+
+## eQTLs
+
+```{r eQTLs}
+# load eQTLs B6
+eQTL_B6_CNSD <- read.table("F:/BXD/data/transcriptome/eQTL_B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Cortex_NSD_pvalcorrected.txt", stringsAsFactors=FALSE, header=TRUE)
+eQTL_B6_CSD <- read.table("F:/BXD/data/transcriptome/eQTL_B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Cortex_SD_pvalcorrected.txt", stringsAsFactors=FALSE, header=TRUE)
+eQTL_B6_LNSD <- read.table("F:/BXD/data/transcriptome/eQTL_B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Liver_NSD_pvalcorrected.txt", stringsAsFactors=FALSE, header=TRUE)
+eQTL_B6_LSD <- read.table("F:/BXD/data/transcriptome/eQTL_B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Liver_SD_pvalcorrected.txt", stringsAsFactors=FALSE, header=TRUE)
+
+# load eQTLs BXD
+eQTL_BXD_CNSD <- read.table("F:/BXD/data/transcriptome/eQTL/genotypesandimputed_withannotation_Local_1_10/TMMnormalized_log2CPM_Cortex_NSD_pvalcorrected.txt", stringsAsFactors=FALSE, header=TRUE)
+eQTL_BXD_CSD <- read.table("F:/BXD/data/transcriptome/eQTL/genotypesandimputed_withannotation_Local_1_10/TMMnormalized_log2CPM_Cortex_SD_pvalcorrected.txt", stringsAsFactors=FALSE, header=TRUE)
+eQTL_BXD_LNSD <- read.table("F:/BXD/data/transcriptome/eQTL/genotypesandimputed_withannotation_Local_1_10/TMMnormalized_log2CPM_Liver_NSD_pvalcorrected.txt", stringsAsFactors=FALSE, header=TRUE)
+eQTL_BXD_LSD <- read.table("F:/BXD/data/transcriptome/eQTL/genotypesandimputed_withannotation_Local_1_10/TMMnormalized_log2CPM_Liver_SD_pvalcorrected.txt", stringsAsFactors=FALSE, header=TRUE)
+
+# create a function to compare and plot BXD vs B6 eQTLs
+compareeQTLsBXDvsB6 <- function(eQTL_BXD, eQTL_B6, name){
+# plot venn
+# expressed genes
+venn_expressedgenes <- venn.diagram(
+  x=list(rownames(eQTL_BXD), rownames(eQTL_B6)),
+  category.names=c("BXD" , "B6"), main=paste("expressed genes in", name), filename=NULL, fill=c(rgb(0, 0, 1, 0.25), rgb(1, 0, 0, 0.25)), col=c(rgb(0, 0, 1, 1), rgb(1, 0, 0, 1)), fontfamily="sans", main.fontfamily="sans", cat.fontfamily="sans", cat.col=c(rgb(0, 0, 1, 0.25), rgb(1, 0, 0, 0.25))
+)
+grid.newpage()
+grid.draw(venn_expressedgenes)
+
+# eQTLs
+venn_eQTL <- venn.diagram(
+  x=list(rownames(eQTL_BXD)[eQTL_BXD$adjustedpvalue<0.05], rownames(eQTL_B6)[eQTL_B6$adjustedpvalue<0.05]),
+  category.names=c("BXD" , "B6"), main=paste("eQTLs with q-value < 0.05 in", name), filename=NULL, fill=c(rgb(0, 0, 1, 0.25), rgb(1, 0, 0, 0.25)), col=c(rgb(0, 0, 1, 1), rgb(1, 0, 0, 1)), fontfamily="sans", main.fontfamily="sans", cat.fontfamily="sans", cat.col=c(rgb(0, 0, 1, 0.75), rgb(1, 0, 0, 0.75)),
+)
+grid.newpage()
+grid.draw(venn_eQTL)
+
+# plot scatterplot
+# find common gene names
+commonsigeQTL <- intersect(rownames(eQTL_BXD)[eQTL_BXD$adjustedpvalue<0.05], rownames(eQTL_B6)[eQTL_B6$adjustedpvalue<0.05])
+plot(eQTL_B6[commonsigeQTL, "adjustedpvalue"], eQTL_BXD[commonsigeQTL, "adjustedpvalue"], main=paste("significant eQTLs", name), xlab="aligned to B6", ylab="aligned to BXD", pch=19, col=rgb(0,0,0,0.1))
+abline(a=0, b=1, lty=2)
+
+# plot MA plot
+commoneQTL <- intersect(rownames(eQTL_BXD), rownames(eQTL_B6))
+varB6 <- eQTL_B6[commoneQTL, "adjustedpvalue"]
+varBXD <- eQTL_BXD[commoneQTL, "adjustedpvalue"]
+var_diff <- varBXD - varB6
+var_mean <- (varBXD + varB6) / 2
+plot(var_mean, var_diff, pch=19, col=densCols(var_mean, var_diff, nbin=128), las=1, main=paste("eQTL qvalues in", name), xlab="Mean qvalue: (BXD + B6) / 2", ylab="Difference qvalue: BXD - B6")
+abline(h=0, lty=2)
+}
+
+compareeQTLsBXDvsB6(eQTL_BXD_CNSD, eQTL_B6_CNSD, "Cortex NSD")
+compareeQTLsBXDvsB6(eQTL_BXD_CSD, eQTL_B6_CSD, "Cortex SD")
+compareeQTLsBXDvsB6(eQTL_BXD_LNSD, eQTL_B6_LNSD, "Liver NSD")
+compareeQTLsBXDvsB6(eQTL_BXD_LSD, eQTL_B6_LSD, "Liver SD")
+```
+
+```{r Figure4B, echo=FALSE, fig.cap="Figure 4 B (Munger 2014)", out.width = '50%'}
+knitr::include_graphics("Graphs/Munger2014_Figure4B.png")
+```
+
+In the DO study, the number of eQTLs is higher: between `r round((6097+670)/17125*100)`% (aligned to standard reference) and `r round((6097+2900)/16985*100)`% (aligned to individualized DO reference) genes expressed have a eQTL. Whereas in the BXD study about 20% maximum of the genes have an eQTL in the liver (about maximum 30% in the cortex).
+
+# Discussion
+
+The BXD and DO are very different models, although both mice populations. The individualization strategy did not increase the number of eQTL detected the BXD analysis and here are possible explanations:
+
+* The BXD lines are less variable than the DO mice, so less genes have a genetic cause in one or more variants between D2 and B6.
+* The variants genotypes and/or imputed are of lower quality. Indeed, in the DO study the animals were genotypes, which minimize mutational drift.
+* The heterozygosity in the BXD is higher than usually thought of for inbred strains. Considering only homozygous variants for the BXD was perhaps an overly simplistic assumption and decreased precision.
+* The mapping settings were more stringent in the DO study, which is more sensible to change of reference.
+* The gene model with ht-seq was too simplistic and removal of multi-mapper genes decreased precision.
+* The threshold for filtering was different, maybe the RNA-seq was of higher quality in the DO study.
+
+# Session information
+
+```{r}
+sessionInfo()
+```

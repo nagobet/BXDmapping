@@ -1,0 +1,10 @@
+Mapping RNA on genome
+
+# 20190621 saved version with just parental and F1 samples, on D2 and B6 mm10 reference, 0 or 1 mismatch allowed
+
+# 20190821 saved version with B6 mm10 reference including all chromosomes, scaffolds, patches (alternative and new). Contains testing of including different sequences (scaffolds, major chromosomes, primary assembly
+
+
+DM analysis
+
+# 20190917 saved first version with crapy managment of the duplicate gene names.

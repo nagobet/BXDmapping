@@ -1,0 +1,514 @@
+---
+title: "Customized Reference Mapping"
+author: "Nastassia Gobet"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    code_folding: hide
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    df_print: paged
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, fig.path="Graphs/CustomizedReferenceMapping/", warning=TRUE)
+
+#load needed libraries
+library(knitr)
+library(vioplot)
+
+# set working directory
+##setwd("F:/BXD/analysis/Mapping")
+```
+
+# GOAL
+
+# dbSNP variants
+
+```{r}
+# source function
+source("F:/BXD/analysis/scripts/mapping/retrieveSTARstatistics.R")
+```
+
+## Uniquely mapped % absolute values
+
+```{r}
+# table Uniquely mapped percentage
+path <- "F:/BXD/data/transcriptome/2_Mapping_STAR/OnPersonalizedRef/"
+statsName <- "Uniquely mapped reads % |"
+references <- dir(path, pattern="DBA_2J_genome_")
+ref <- "DBA_2J_genome_nonrandomized_indels_maternal"
+samples <- gsub("_Log.final.out","", list.files(paste0(path, "/", ref), pattern="_Log.final.out"))
+
+resUniqP <- outer(FUN=retrieveStats, X=references, Y=paste0(samples, "_"), path="F:/BXD/data/transcriptome/2_Mapping_STAR/OnPersonalizedRef/", statsName="Uniquely mapped reads % |")
+rownames(resUniqP) <- references
+colnames(resUniqP) <- samples
+##write.table(resUniqP, file="teststats.tsv", sep="\t", col.names=NA)
+```
+
+```{r UniqPbysample, fig.width=10, fig.height=10}
+par(mar=c(15.1, 4.1, 4.1, 0.1))
+for(sample in samples){
+  barplot(resUniqP[,sample], main=sample, las=2, cex.names=0.7, ylim=c(0,100))
+}
+```
+
+## Difference in Uniquely mapped %
+
+```{r, rows.print=20}
+baseline <- retrieveStats("B6mm10_primaryassembly", paste0(samples, "_exactunique"), "F:/BXD/data/transcriptome/2_Mapping_STAR/OnGenome", statsName)
+
+resUniqP <- rbind(resUniqP, baseline)
+as.data.frame(resUniqP)
+```
+
+### by sample
+
+```{r DiffuniqPbysample, fig.width=10, fig.height=10}
+par(mar=c(15.1, 4.1, 4.1, 0.1))
+palette(c("red3", "black", "blue3"))
+limit <- ceiling(max(abs(sweep(resUniqP, MARGIN=2, STATS=resUniqP["baseline",], FUN="-"))))
+for(sample in samples){
+  barplot(resUniqP[,sample]-resUniqP["baseline",sample], col=sign(resUniqP[,sample]-resUniqP["baseline",sample])+2,
+          main=sample, las=2, cex.names=0.6, ylab=paste("Difference in", statsName), ylim=c(-limit,limit))
+}
+```
+
+### by reference
+
+```{r DiffuniqPbyref}
+for(refer in references){
+  barplot(resUniqP[refer,]-resUniqP["baseline",], col=sign(resUniqP[refer,]-resUniqP["baseline",])+2,
+          main=refer, las=2, cex.names=1, ylab=paste("Difference in", statsName), ylim=c(-limit,limit))
+  abline(h=0, col="black")
+  print(c(refer, range()))
+}
+
+D2samples <- grep("DB[12]", colnames(resUniqP), value=TRUE)
+range(resUniqP["DBA_2J_genome_nonrandomized_indelsSNVs_paternal", D2samples]-resUniqP["baseline", D2samples])
+B6samples <- grep("B6[12]", colnames(resUniqP), value=TRUE)
+range(resUniqP["DBA_2J_genome_nonrandomized_indelsSNVs_paternal", B6samples]-resUniqP["baseline", B6samples])
+```
+
+## Unmapped (too many mismatches) % absolute values
+
+```{r UnmappedMismatchesPrepare}
+# table Uniquely mapped percentage
+path <- "F:/BXD/data/transcriptome/2_Mapping_STAR/OnPersonalizedRef/"
+statsName <- "% of reads unmapped: too many mismatches |"
+references <- dir(path, pattern="DBA_2J_genome_")
+ref <- "DBA_2J_genome_nonrandomized_indels_maternal"
+samples <- gsub("_Log.final.out","", list.files(paste0(path, "/", ref), pattern="_Log.final.out"))
+
+resUnmappedMismatches <- outer(FUN=retrieveStats, X=references, Y=paste0(samples, "_"), path="F:/BXD/data/transcriptome/2_Mapping_STAR/OnPersonalizedRef/", statsName="% of reads unmapped: too many mismatches |")
+rownames(resUnmappedMismatches) <- references
+colnames(resUnmappedMismatches) <- samples
+##write.table(resUnmappedMismatches, file="teststats.tsv", sep="\t", col.names=NA)
+```
+
+```{r UnmappedMismatchesbysample, fig.width=10, fig.height=10}
+par(mar=c(15.1, 4.1, 4.1, 0.1))
+for(sample in samples){
+  barplot(resUnmappedMismatches[,sample], main=sample, las=2, cex.names=0.7, ylim=c(0,100))
+}
+```
+
+## Difference in Unmapped (too many mismatches) %
+
+```{r, rows.print=20}
+baseline <- retrieveStats("B6mm10_primaryassembly", paste0(samples, "_exactunique"), "F:/BXD/data/transcriptome/2_Mapping_STAR/OnGenome", statsName)
+
+resUnmappedMismatches <- rbind(resUnmappedMismatches, baseline)
+as.data.frame(resUnmappedMismatches)
+```
+
+### by sample
+
+```{r DiffUnmappedMismatchesbysample, fig.width=10, fig.height=10}
+par(mar=c(15.1, 4.1, 4.1, 0.1))
+palette(c("red3", "black", "blue3"))
+limit <- ceiling(max(abs(sweep(resUnmappedMismatches, MARGIN=2, STATS=resUnmappedMismatches["baseline",], FUN="-"))))
+for(sample in samples){
+  barplot(resUnmappedMismatches[,sample]-resUnmappedMismatches["baseline",sample], col=sign(resUnmappedMismatches[,sample]-resUnmappedMismatches["baseline",sample])+2,
+          main=sample, las=2, cex.names=0.6, ylab=paste("Difference in", statsName), ylim=c(-limit,limit))
+}
+```
+
+### by reference
+
+```{r DiffUnmappedMismatchesbyref}
+for(refer in references){
+  barplot(resUnmappedMismatches[refer,]-resUnmappedMismatches["baseline",], col=sign(resUnmappedMismatches[refer,]-resUnmappedMismatches["baseline",])+2,
+          main=refer, las=2, cex.names=1, ylab=paste("Difference in", statsName), ylim=c(-limit,limit))
+  abline(h=0, col="black")
+}
+```
+
+## Unmapped (too short) % absolute values
+
+```{r UnmappedShortPrepare}
+# table Uniquely mapped percentage
+path <- "F:/BXD/data/transcriptome/2_Mapping_STAR/OnPersonalizedRef/"
+statsName <- "% of reads unmapped: too short |"
+references <- dir(path, pattern="DBA_2J_genome_")
+ref <- "DBA_2J_genome_nonrandomized_indels_maternal"
+samples <- gsub("_Log.final.out","", list.files(paste0(path, "/", ref), pattern="_Log.final.out"))
+
+resUnmappedShort <- outer(FUN=retrieveStats, X=references, Y=paste0(samples, "_"), path="F:/BXD/data/transcriptome/2_Mapping_STAR/OnPersonalizedRef/", statsName="% of reads unmapped: too many mismatches |")
+rownames(resUnmappedShort) <- references
+colnames(resUnmappedShort) <- samples
+```
+
+```{r UnmappedShortbysample, fig.width=10, fig.height=10}
+par(mar=c(15.1, 4.1, 4.1, 0.1))
+for(sample in samples){
+  barplot(resUnmappedShort[,sample], main=sample, las=2, cex.names=0.7, ylim=c(0,100))
+}
+```
+
+## Difference in Unmapped (too short) %
+
+```{r, rows.print=20}
+baseline <- retrieveStats("B6mm10_primaryassembly", paste0(samples, "_exactunique"), "F:/BXD/data/transcriptome/2_Mapping_STAR/OnGenome", statsName)
+
+resUnmappedShort <- rbind(resUnmappedShort, baseline)
+as.data.frame(resUnmappedShort)
+```
+
+### by sample
+
+```{r DiffUnmappedShortbysample, fig.width=10, fig.height=10}
+par(mar=c(15.1, 4.1, 4.1, 0.1))
+palette(c("red3", "black", "blue3"))
+limit <- ceiling(max(abs(sweep(resUnmappedShort, MARGIN=2, STATS=resUnmappedShort["baseline",], FUN="-"))))
+for(sample in samples){
+  barplot(resUnmappedShort[,sample]-resUnmappedShort["baseline",sample], col=sign(resUnmappedShort[,sample]-resUnmappedShort["baseline",sample])+2,
+          main=sample, las=2, cex.names=0.6, ylab=paste("Difference in", statsName), ylim=c(-limit,limit))
+}
+```
+
+### by reference
+
+```{r DiffUnmappedShortbyref}
+for(refer in references){
+  barplot(resUnmappedShort[refer,]-resUnmappedShort["baseline",], col=sign(resUnmappedShort[refer,]-resUnmappedShort["baseline",])+2,
+          main=refer, las=2, cex.names=1, ylab=paste("Difference in", statsName), ylim=c(-limit,limit))
+  abline(h=0, col="black")
+}
+```
+
+# Genotypes
+
+## Preparation
+
+```{r preparationGenoRestrictive}
+path <- "F:/BXD/data/MappingEvaluation"
+statsName <- "Uniquely mapped reads % |"
+lines <- read.table("F:/BXD/data/lines.txt", stringsAsFactors=FALSE)$V1
+# remove line 63
+lines <- setdiff(lines, "BXD63")
+
+# list samples
+samples <- c()
+getSamplesNames <- function(x,y){paste0(x,linenumber,y)}
+for(linenumber in sub("BXD","",lines)){
+  samples <- c(samples, c(t(outer(c("","L"),c("nsd","sd"),getSamplesNames))))
+}
+
+# retrieve uniquely mapped reads percentage on genotypesandimputed-based customized references
+ref_lines <- c(sapply(lines,rep,4))
+reference <- "genotypesandimputed_withoutannotation_EndToEnd_1_0"
+conditions <- as.factor(rep(c("nsd","sd"),length(samples)/2))
+tissues <- as.factor(rep(sort(rep(c("C","L"),2)),length(samples)/4))
+genotypesandimputed <- retrieveStats(reference, paste0(samples, "_"), path, statsName)
+
+# retrieve uniquely mapped reads percentage on genotypes-based customized references
+path <- "F:/BXD/data/transcriptome/2_Mapping_STAR/OnPersonalizedRef"
+references <- paste0(ref_lines, "_genome_nonrandomized_genotypes_paternal")
+genotypes <- retrieveStats(references, paste0(samples, "_"), path, statsName)
+
+# retrieve uniquely mapped reads percentage on B6 mm10 primary assembly
+path <- "F:/BXD/data/transcriptome/2_Mapping_STAR/OnGenome/"
+references <- "B6mm10_primaryassembly"
+B6mm10 <- retrieveStats(references, paste0(samples, "_exactunique"), path, statsName)
+
+# assemble dataset
+geno_restrictive <- data.frame(samples, ref_lines, tissues, conditions, genotypesandimputed, genotypes, B6mm10)
+geno_restrictive
+```
+
+## Consequence of customization
+
+```{r analysisGenoRestrictive}
+summary(genotypesandimputed-B6mm10)
+range(tapply(genotypesandimputed-B6mm10, ref_lines, range))
+
+summary(genotypes-B6mm10)
+range(tapply(genotypes-B6mm10, ref_lines, range))
+```
+
+```{r GenoRestrictive, fig.width=10, fig.height=7}
+# genotypes VS B6
+palette(c("darkblue", "red"))
+plot(genotypes, B6mm10, pch=19, las=1)
+abline(a=0, b=1, col="darkred", lty=2, lwd=2)
+
+plot((genotypes+B6mm10)/2, genotypes-B6mm10, pch=19, ylim=c(-5,5), las=1)
+title(main="MA-plot")
+abline(h=0, col="darkred", lty=2, lwd=2)
+
+palette(c("blue", "darkblue", "red", "darkred"))
+plot(genotypes-B6mm10, type="h", col=1:4, lwd=6, 
+     ylim=c(0,0.04), yaxs="i", xaxt="n", 
+     main="Gain of genotypes GN (compared to B6mm10)", ylab="gain in uniquely mapped reads percentage", xlab="", bty="l", las=1)
+legend("topright", c("Cortex_NSD", "Cortex_SD", "Liver_NSD", "Liver_SD"), fill=1:4, horiz=TRUE)
+axis(1, seq.int(2.5,length(genotypes),4), lines, tick=FALSE, las=2)
+
+# genotypesandimputed VS B6
+palette(c("darkblue", "red"))
+plot(genotypesandimputed, B6mm10, pch=19, las=1)
+abline(a=0, b=1, col="darkred", lty=2, lwd=2)
+
+plot((genotypesandimputed+B6mm10)/2, genotypesandimputed-B6mm10, pch=19, ylim=c(-5,5), las=1)
+title(main="MA-plot")
+abline(h=0, col="darkred", lty=2, lwd=2)
+
+plot((genotypesandimputed+B6mm10)/2, genotypesandimputed-B6mm10, pch=as.character(tissues), col=conditions, ylim=c(-5,5), las=1)
+title(main="MA-plot")
+abline(h=0, col="darkred", lty=2, lwd=2)
+
+palette(c("blue", "darkblue", "red", "darkred"))
+plot(genotypesandimputed-B6mm10, type="h", col=1:4, lwd=6, 
+     ylim=c(0,5), yaxs="i", xaxt="n", 
+     main="Gain of genotypes GN + imputed (compared to B6mm10)", ylab="gain in uniquely mapped reads percentage", xlab="", bty="l", las=1)
+legend("topright", c("Cortex_NSD", "Cortex_SD", "Liver_NSD", "Liver_SD"), fill=1:4, horiz=TRUE)
+axis(1, seq.int(2.5,length(genotypesandimputed),4), lines, tick=FALSE, las=2)
+```
+
+# eQTL results
+
+We want to answer the question: Are these BXD-specific references better than the non-BXD specific reference (B6 mm10 primary assembly)?
+
+The idea is to look the influence of the mapping downstream. The cis-eQTL detection was chosen because directly downstream gene counting and normalization, and more likely to be impacted by BXD-specific mapping.
+
+The references:
+
+* B6 or non-BXD specific is the B6 mm10 primary assembly reference using ENSEMBL data set
+* BXD-specific references are derived from B6 using ENSEMBL data set but modified at genotypes (from GeneNetwork and imputed) positions specific to each BXD line
+
+## Permissive setting
+
+```{r eQTLresultsB6vsBXDspecific}
+# create function to retrieve stats on eQTLs
+retrieveeQTLstats <- function(path, tissue, condition){
+  data <- read.table(paste0(path, "TMMnormalized_log2CPM_", tissue, "_", condition, "_pvalcorrected.txt"), stringsAsFactors=FALSE)
+  # retrieve number of significant eQTLs
+  sig <- length(which(data$adjustedpvalue<0.05))
+  # retrieve total number of expressed genes
+  tot <- nrow(data)
+  
+  datafull <- read.table(paste0(path, "TMMnormalized_log2CPM_", tissue, "_", condition, ".txt"), stringsAsFactors=FALSE)
+  neg <- table(sign(datafull$V9[which(data$adjustedpvalue<0.05)]))[["-1"]]
+  pos <- table(sign(datafull$V9[which(data$adjustedpvalue<0.05)]))[["1"]]
+  
+  # calculate percentage of significant eQTLs (over number of expressed genes)
+  percentage_sig <- sig/tot*100
+  # calculate percentage of significant eQTLs with positive slope (over number of expressed genes)
+  percentage_pos <- pos/tot*100
+  # calculate percentage of difference between significant eQTLs with negative and positive slope (over number of expressed genes)
+  percentage_skewness <- (neg-pos)/tot*100
+  
+  return(c(sig=sig, total=tot, neg=neg, pos=pos, percentage_sig=percentage_sig, percentage_pos=percentage_pos, percentage_skewness=percentage_skewness))
+}
+
+paths <- c(B6="F:/BXD/data/transcriptome/eQTL_B6mm10primaryassembly_withannotation/", BXD="F:/BXD/data/transcriptome/eQTL_BXDfromGNandimputedD2blocks_withannotation/")
+
+##options(scipen=999)
+
+as.data.frame(t(sapply(paths, FUN=retrieveeQTLstats, tissue="Cortex", condition="NSD")))
+as.data.frame(t(sapply(paths, FUN=retrieveeQTLstats, tissue="Cortex", condition="SD")))
+as.data.frame(t(sapply(paths, FUN=retrieveeQTLstats, tissue="Liver", condition="NSD")))
+as.data.frame(t(sapply(paths, FUN=retrieveeQTLstats, tissue="Liver", condition="SD")))
+
+CNSDcomparisonstats <- t(sapply(paths, FUN=retrieveeQTLstats, tissue="Cortex", condition="NSD"))
+CSDcomparisonstats <- t(sapply(paths, FUN=retrieveeQTLstats, tissue="Cortex", condition="SD"))
+LNSDcomparisonstats <- t(sapply(paths, FUN=retrieveeQTLstats, tissue="Liver", condition="NSD"))
+LSDcomparisonstats <- t(sapply(paths, FUN=retrieveeQTLstats, tissue="Liver", condition="SD"))
+
+comparisonSig <- cbind(CNSDcomparisonstats[, "percentage_sig"], CSDcomparisonstats[, "percentage_sig"], LNSDcomparisonstats[, "percentage_sig"], LSDcomparisonstats[, "percentage_sig"])
+comparisonSkewness <- cbind(CNSDcomparisonstats[, "percentage_skewness"], CSDcomparisonstats[, "percentage_skewness"], LNSDcomparisonstats[, "percentage_skewness"], LSDcomparisonstats[, "percentage_skewness"])
+
+barplot(comparisonSig, names.arg=rep(c("B6", "BXD"),4), beside=TRUE, las=1, ylab="significant eQTLs %", ylim=c(0, 35))
+text(x=c(1:4*2+1:4-1), y=37, labels=c("Cortex NSD", "Cortex SD", "Liver NSD", "Liver SD"), xpd=TRUE)
+abline(h=0)
+
+barplot(comparisonSkewness, names.arg=rep(c("B6", "BXD"),4), beside=TRUE, las=1, ylab="Skewness %", ylim=c(-0.5, 2.5))
+text(x=c(1:4*2+1:4-1), y=2.7, labels=c("Cortex NSD", "Cortex SD", "Liver NSD", "Liver SD"), xpd=TRUE)
+abline(h=0)
+
+```
+
+The setting "genotypesandimputed_withannotation_Local_0_10" is closest to the default/standard mapping setting, except that the references are BXD-specific. This setting is referred to as "permissive".
+
+### Default/standard setting on B6 mm9 reference using RefSeq data set
+
+```{r mm9value, eval=FALSE, include=TRUE}
+datamm9 <- read.table("F:/BXD/BACKUP/mm9/Data/IntermediateLayer/cis-eQTL/Cortex_nsd/ciseQTL.Cortex.NSD.pvalcorrected.txt", stringsAsFactors=FALSE)
+# retrieve number of significant eQTLs
+sig <- length(which(datamm9$adjustedpvalue<0.05))
+# retrieve total number of eQTLs
+tot <- nrow(datamm9)
+c(nb_sig=sig, total=tot, ratio=sig/tot)
+```
+
+### Default/standard setting on B6 mm10 reference using RefSeq data set
+
+Warning: RNA mapping was perform with Kallisto.
+
+```{r mm10value, eval=FALSE, include=TRUE}
+datamm10 <- read.table("F:/BXD/BACKUP/mm10/Data/IntermediateLayer/cis-eQTL/ciseQTL.Cortex.NSD.pvalcorrected.txt", stringsAsFactors=FALSE)
+# retrieve number of significant eQTLs
+sig <- length(which(datamm10$adjustedpvalue<0.05))
+# retrieve total number of eQTLs
+tot <- nrow(datamm10)
+c(nb_sig=sig, total=tot, ratio=sig/tot)
+```
+
+
+
+### Results
+
+BXD-specific references does not improve the eQTL metrics.
+
+### Discussion
+
+Is this metric adapted for this comparison? Either the BXD-specific references strategy is not improving eQTL (or not well implemented maybe genotypes imputation is not good enough to see a benefit) OR metric is not adapted because of a systematic bias. Hypothesis: reference mapping bias causes erroneous eQTL calls. If this hypothesis is correct, erroneous eQTL calls are more likely due to a (biased) higher expression level in samples with the reference allele and with genomic variant overlapping with the gene. (It could also be due to more complex scenarios were variants in another genomic regions makes a gene more/less unique).
+
+## Exploring differences between eQTLs obtain with B6 reference and with BXD-specific references
+
+```{r OverlappingeQTLs}
+# create function to retrieve eQTLs info
+retrieveeQTLstats <- function(path, tissue, condition){
+  data <- read.table(paste0(path, "TMMnormalized_log2CPM_", tissue, "_", condition, "_pvalcorrected.txt"), stringsAsFactors=FALSE)
+  # retrieve number of significant eQTLs
+  sig <- length(which(data$adjustedpvalue<0.05))
+  # retrieve total number of expressed genes
+  tot <- nrow(data)
+  
+  datafull <- read.table(paste0(path, "TMMnormalized_log2CPM_", tissue, "_", condition, ".txt"), stringsAsFactors=FALSE)
+  neg <- table(sign(datafull$V9[which(data$adjustedpvalue<0.05)]))[["-1"]]
+  pos <- table(sign(datafull$V9[which(data$adjustedpvalue<0.05)]))[["1"]]
+  
+  # calculate percentage of significant eQTLs (over number of expressed genes)
+  percentage_sig <- sig/tot*100
+  # calculate percentage of significant eQTLs with positive slope (over number of expressed genes)
+  percentage_pos <- pos/tot*100
+  # calculate percentage of difference between significant eQTLs with negative and positive slope (over number of expressed genes)
+  percentage_skewness <- (neg-pos)/tot*100
+  
+  return(c(sig=sig, total=tot, neg=neg, pos=pos, percentage_sig=percentage_sig, percentage_pos=percentage_pos, percentage_skewness=percentage_skewness))
+}
+
+paths <- c(B6="F:/BXD/data/transcriptome/eQTL_B6mm10primaryassembly_withannotation/", BXD="F:/BXD/data/transcriptome/eQTL_BXDfromGNandimputedD2blocks_withannotation/")
+
+```
+
+### Detecting potential reference bias
+
+Trying to see if there is a reference bias. Assumes the number of eQTLs with B6 or D2 should be equivalent if there is no reference bias. It is more logical to use only significant eQTLs.
+
+Exploring plots and stats for Cortex NSD (log2CPM).
+
+```{r DetectingPotentialReferenceBias}
+dataB6 <- read.table("F:/BXD/data/transcriptome/eQTL_B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Cortex_SD_pvalcorrected.txt", stringsAsFactors=FALSE)
+dataBXD <- read.table("F:/BXD/data/transcriptome/eQTL_BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_Cortex_SD_pvalcorrected.txt", stringsAsFactors=FALSE)
+
+dataBXDfull <- read.table("F:/BXD/data/transcriptome/eQTL_BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_Cortex_SD.txt", stringsAsFactors=FALSE)
+dataB6full <- read.table("F:/BXD/data/transcriptome/eQTL_B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Cortex_SD.txt", stringsAsFactors=FALSE)
+
+##table(sign(dataB6full$V9))
+B6_density <- density(dataB6full$V9[!is.na(dataB6full$V9)])
+plot(B6_density, lwd=3, main="Allelic ratio of all eQTLs in B6", xlim=c(-0.5,0.5))
+abline(v=0, col="darkred", lty=2, lwd=2)
+##table(sign(dataB6full$V9))[[1]]/table(sign(dataB6full$V9))[[2]]
+table(sign(dataB6full$V9[which(dataB6$adjustedpvalue<0.05)]))
+B6sig_density <- density(dataB6full$V9[which(dataB6$adjustedpvalue<0.05)])
+plot(B6sig_density, lwd=3, main="Allelic ratio of significant eQTLs in B6")
+abline(v=0, col="darkred", lty=2, lwd=2)
+##table(sign(dataB6full$V9[which(dataB6$adjustedpvalue<0.05)]))[[1]]/table(sign(dataB6full$V9[which(dataB6$adjustedpvalue<0.05)]))[[2]]
+table(sign(dataB6full$V9[which(dataB6$adjustedpvalue<0.05)]))[[2]]/nrow(dataB6full)
+
+##table(sign(dataBXDfull$V9))
+BXD_density <- density(dataBXDfull$V9[!is.na(dataBXDfull$V9)])
+plot(BXD_density, lwd=3, main="Allelic ratio of all eQTLs in BXD", xlim=c(-0.5,0.5), col="gray70")
+abline(v=0, col="darkred", lty=2, lwd=2)
+##table(sign(dataBXDfull$V9))[[1]]/table(sign(dataBXDfull$V9))[[2]]
+table(sign(dataBXDfull$V9[which(dataBXD$adjustedpvalue<0.05)]))
+BXDsig_density <- density(dataBXDfull$V9[which(dataBXD$adjustedpvalue<0.05)])
+plot(BXDsig_density, lwd=3, main="Allelic ratio of significant eQTLs in BXD", col="gray70")
+abline(v=0, col="darkred", lty=2, lwd=2)
+##table(sign(dataBXDfull$V9[which(dataBXD$adjustedpvalue<0.05)]))[[1]]/table(sign(dataBXDfull$V9[which(dataBXD$adjustedpvalue<0.05)]))[[2]]
+table(sign(dataBXDfull$V9[which(dataBXD$adjustedpvalue<0.05)]))[[2]]/nrow(dataBXDfull)
+
+# B6 vs BXD references
+par(mfrow=c(1,2))
+plot(B6sig_density, lwd=3, main="Allelic ratio of significant eQTLs in B6", xlim=c(-5, 5), ylim=c(0,2.6), las=1)
+abline(v=0, col="darkred", lty=2, lwd=2)
+plot(BXDsig_density, lwd=3, main="Allelic ratio of significant eQTLs in BXD", col="gray70", xlim=c(-5, 5), ylim=c(0,2.6), las=1)
+abline(v=0, col="darkred", lty=2, lwd=2)
+# same but zoom on center
+par(mfrow=c(1,2))
+plot(B6sig_density, lwd=3, main="Allelic ratio of significant eQTLs in B6", xlim=c(-0.5, 0.5), ylim=c(0,2.6), las=1)
+abline(v=0, col="darkred", lty=2, lwd=2)
+plot(BXDsig_density, lwd=3, main="Allelic ratio of significant eQTLs in BXD", col="gray70", xlim=c(-0.5, 0.5), ylim=c(0,2.6), las=1)
+abline(v=0, col="darkred", lty=2, lwd=2)
+# on one graph
+par(mfrow=c(1,1))
+plot(B6sig_density, lwd=3, main="Allelic ratio of significant eQTLs in B6 vs BXD references", xlim=c(-0.5, 0.5), ylim=c(0,2.6), las=1)
+lines(BXDsig_density, lwd=3, col="gray70")
+abline(v=0, col="darkred", lty=2, lwd=2)
+legend("topright", legend=c("B6", "BXD"), title="References", col=c("black", "gray70"), lty=1, lwd=3)
+```
+
+```{r compareGeneSets}
+idx <- sort(dataB6full$V9, index.return=TRUE)$ix
+
+hist(dataB6full$V9[which(dataB6$adjustedpvalue<0.05)], breaks=50)
+hist(dataB6full$V9, breaks=50)
+
+eQTLB6 <- rownames(dataB6)[which(dataB6$adjustedpvalue<0.05)]
+eQTLBXD <- rownames(dataBXD)[which(dataBXD$adjustedpvalue<0.05)]
+
+commoneGenes <- intersect(eQTLB6, eQTLBXD)
+B6onlyeGenes <- setdiff(eQTLB6, eQTLBXD)
+BXDonlyeGenes <- setdiff(eQTLBXD, eQTLB6)
+
+hist(dataB6full$V9[match(commoneGenes, dataB6full$V1)], breaks=50, main="common")
+hist(dataB6full$V9[match(BXDonlyeGenes, dataB6full$V1)], breaks=50, main="BXDonly")
+hist(dataB6full$V9[match(B6onlyeGenes, dataB6full$V1)], breaks=50, main="B6only")
+
+summary(dataB6full$V9[match(commoneGenes, dataB6full$V1)])
+summary(dataB6full$V9[match(B6onlyeGenes, dataB6full$V1)])
+summary(dataB6full$V9[match(BXDonlyeGenes, dataB6full$V1)])
+vioplot(dataB6full$V9[match(commoneGenes, dataB6full$V1)], dataB6full$V9[match(B6onlyeGenes, dataB6full$V1)], dataBXDfull$V9[match(BXDonlyeGenes, dataBXDfull$V1)], names=c("commoneGenes", "B6only", "BXDonly"))
+
+# The significant eGenes not in common have the same marker?
+table(dataB6[B6onlyeGenes, "marker"]==dataBXD[B6onlyeGenes, "marker"], useNA="ifany")
+table(dataBXD[BXDonlyeGenes, "marker"]==dataB6[BXDonlyeGenes, "marker"], useNA="ifany")
+table(dataB6[commoneGenes, "marker"]==dataBXD[commoneGenes, "marker"], useNA="ifany")
+```
+
+# Session information
+
+```{r}
+sessionInfo()
+```

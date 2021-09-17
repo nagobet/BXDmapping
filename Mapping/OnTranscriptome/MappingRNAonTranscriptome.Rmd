@@ -1,0 +1,286 @@
+---
+title: "Mapping RNA on transcriptome"
+author: "Nastassia Gobet"
+date: "4 September 2019"
+output:
+  html_document:
+    code_folding: hide
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    df_print: paged
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, fig.path="Graphs/", warning=TRUE)
+
+#load needed libraries
+library(knitr)
+
+# set working directory
+##setwd("F:/BXD/analysis/Mapping/OnTranscriptome")
+```
+
+# Goal
+
+The idea here is to map the RNA-reads to the transcriptome (fasta sequences of the transcripts only) using Kallisto or STAR.
+
+# Data
+
+Loading data
+
+```{r LoadData}
+# load data for Kallisto
+# load B6mm10 stats
+n_pseudoaligned_B6mm10 <- read.table("F:/BXD/data/transcriptome/2.5_quantification_Kallisto/B6mm10/n_pseudoaligned.tab", header=FALSE, stringsAsFactors=FALSE)
+n_processed_B6mm10 <- read.table("F:/BXD/data/transcriptome/2.5_quantification_Kallisto/B6mm10/n_processed.tab", header=FALSE, stringsAsFactors=FALSE)
+n_unique_B6mm10 <- read.table("F:/BXD/data/transcriptome/2.5_quantification_Kallisto/B6mm10/n_unique.tab", header=FALSE, stringsAsFactors=FALSE)
+# load D2 stats
+n_pseudoaligned_D2 <- read.table("F:/BXD/data/transcriptome/2.5_quantification_Kallisto/D2/n_pseudoaligned.tab", header=FALSE, stringsAsFactors=FALSE)
+n_processed_D2 <- read.table("F:/BXD/data/transcriptome/2.5_quantification_Kallisto/D2/n_processed.tab", header=FALSE, stringsAsFactors=FALSE)
+n_unique_D2 <- read.table("F:/BXD/data/transcriptome/2.5_quantification_Kallisto/D2/n_unique.tab", header=FALSE, stringsAsFactors=FALSE)
+
+# load data for STAR for all samples
+B6mm10all <- read.table("F:/BXD/data/transcriptome/2_Mapping_STAR/OnTranscriptome/MappingStatisticsB6mm10.tsv", header=TRUE, stringsAsFactors=FALSE, row.names="Sample_Name")
+D2all <- read.table("F:/BXD/data/transcriptome/2_Mapping_STAR/OnTranscriptome/MappingStatisticsD2.tsv", header=TRUE, stringsAsFactors=FALSE, row.names="Sample_Name")
+
+# load table to convert mouse lines names
+##MouseLines <- read.table("F:/BXD/data/ConvertLineNames.tsv", sep="\t", header=FALSE, stringsAsFactors=FALSE)
+```
+
+```{r CalculatePercentages}
+# calculate percentages for STAR tables
+for (c in 2:ncol(D2all)){
+  D2all[c] <- D2all[c]/D2all$Total*100
+}
+for (c in 2:ncol(B6mm10all)){
+  B6mm10all[c] <- B6mm10all[c]/B6mm10all$Total*100
+}
+```
+
+# STAR statistics tables {.tabset}
+
+## on B6 (mm10)
+
+```{r DisplayB6mm10table}
+# display values B6 mm10
+B6mm10all
+```
+
+## on D2
+
+```{r DisplayD2table}
+# display values D2
+D2all
+```
+
+# STAR comparison B6 (mm10) or D2 reference {.tabset}
+
+```{r SetXlimRange}
+# set range of values for graph
+mylim <- range(D2all[,-1], B6mm10all[,-1])
+```
+
+## All samples with default parameters
+
+```{r STAR_AllSamplesDefault}
+  # s is the type of statistics
+  for(s in c("Uniq", "Multi")){
+    # t is the word (adverb) used in plot title
+    t <- ifelse(s=="Uniq", yes="Uniquely", no="Multiply")
+    # plot B6 mm10 values
+    plot(B6mm10all[,paste0(s,"Default")], pch=19, col="black", ylim=mylim, las=2, xaxt="n", ylab=paste(t, "mapped percentage"), xlab="Samples", main=paste(t, "mapped with", "STAR default parameters"))
+    # add D2 values
+    points(D2all[,paste0(s,"Default")], pch=19, col="tan")
+    # make tissue axis (x-axis)
+    for(myline in seq(0,2,0.5)){
+      axis(1, at=88, line=myline, labels=c(""))
+    }
+    axis(1, at=c(44.5,132.5), line=1, tick=FALSE, labels=c("cortex", "liver"))
+    # legend for reference
+    legend("bottomleft", title="Reference", legend=c("B6mm10","D2"), fill=c("black","tan"))
+  }
+```
+
+## Parental and F1 samples with default parameters
+
+```{r STAR_ParentalAndF1default}
+  # s is the type of statistics
+  for(s in c("Uniq", "Multi")){
+    # t is the word (adverb) used in plot title
+    t <- ifelse(s=="Uniq", yes="Uniquely", no="Multiply")
+    # plot B6 mm10 values
+    plot(B6mm10all[grep("[BD]",rownames(B6mm10all)),paste0(s,"Default")], pch=19, col="black", ylim=mylim, las=2, xaxt="n", ylab=paste(t, "mapped percentage"), xlab="Samples", main=paste(t, "mapped with", "STAR default parameters"))
+    # add D2 values
+    points(D2all[grep("[BD]",rownames(D2all)),paste0(s,"Default")], pch=19, col="tan")
+    # make samples axis (x-axis)
+    abline(v=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5))
+    axis(1, at=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5), labels=rep(c(""),7))
+    axis(1, at=c(c(2.5,5.5,8.5,11.5),12+c(2.5,5.5,8.5,11.5)), tick=FALSE, labels=rep(c("B6","BxD","D2","DxB"),2))
+    for(myline in seq(0.5,2,0.5)){
+      axis(1, at=12.5, line=myline, labels=c(""))
+    }
+    axis(1, at=c(6.5,18.5), line=1, tick=FALSE, labels=c("cortex", "liver"))
+    # legend for reference
+    legend("bottomleft", title="Reference", legend=c("B6mm10","D2"), fill=c("black","tan"))
+  }
+```
+
+## All samples by mismatches {.tabset}
+
+```{r STAR_AllSamplesByMismatches, results='asis'}
+# m is the number of mismatches
+for(m in 0:10){
+  # generate the header
+  cat(paste0("\n\n### ", m, "\n"))
+  # s is the type of statistics
+  for(s in c("Uniq", "Multi")){
+    # t is the word (adverb) used in plot title
+    t <- ifelse(s=="Uniq", yes="Uniquely", no="Multiply")
+    # p is the position of legend
+    p <- ifelse(s=="Uniq", yes="topleft", no="bottomleft")
+    # plot B6 mm10 values
+    plot(B6mm10all[,paste0(s,m)], pch=19, col="black", ylim=mylim, las=2, xaxt="n", ylab=paste(t, "mapped percentage"), xlab="Samples", main=paste(t, "mapped with", m, "mismatch(es) allowed"))
+    # add D2 values
+    points(D2all[,paste0(s,m)], pch=19, col="tan")
+    # make samples axis (x-axis)
+    for(myline in seq(0,2,0.5)){
+      axis(1, at=88, line=myline, labels=c(""))
+    }
+    axis(1, at=c(44.5,132.5), line=1, tick=FALSE, labels=c("cortex", "liver"))
+    # legend for reference
+    legend(p, title="Reference", legend=c("B6mm10","D2"), fill=c("black","tan"))
+  }
+}
+```
+
+## Parental and F1 samples by mismatches {.tabset}
+
+```{r STAR_ParentalAndF1byMismatches, results='asis'}
+# m is the number of mismatches
+for(m in 0:10){
+  # generate the header
+  cat(paste0("\n\n### ", m, "\n"))
+  # s is the type of statistics
+  for(s in c("Uniq", "Multi")){
+    # t is the word (adverb) used in plot title
+    t <- ifelse(s=="Uniq", yes="Uniquely", no="Multiply")
+    # p is the position of legend
+    p <- ifelse(s=="Uniq", yes="topleft", no="bottomleft")
+    # plot B6 mm10 values
+    plot(B6mm10all[grep("[BD]",rownames(B6mm10all)),paste0(s,m)], pch=19, col="black", ylim=mylim, las=2, xaxt="n", ylab=paste(t, "mapped percentage"), xlab="Samples", main=paste(t, "mapped with", m, "mismatch(es) allowed"))
+    # add D2 values
+    points(D2all[grep("[BD]",rownames(D2all)),paste0(s,m)], pch=19, col="tan")
+    # make samples axis (x-axis)
+    abline(v=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5))
+    axis(1, at=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5), labels=rep(c(""),7))
+    axis(1, at=c(c(2.5,5.5,8.5,11.5),12+c(2.5,5.5,8.5,11.5)), tick=FALSE, labels=rep(c("B6","BxD","D2","DxB"),2))
+    for(myline in seq(0.5,2,0.5)){
+      axis(1, at=12.5, line=myline, labels=c(""))
+    }
+    axis(1, at=c(6.5,18.5), line=1, tick=FALSE, labels=c("cortex", "liver"))
+    # legend for reference
+    legend(p, title="Reference", legend=c("B6mm10","D2"), fill=c("black","tan"))
+  }
+}
+```
+
+## All mismatches by sample
+
+```{r STAR_MismatchesBySample}
+par(mfrow=c(2,5))
+for(mysample in rownames(B6mm10all)){
+  # on B6 mm10 reference
+  plot(c(0:10),B6mm10all[mysample,2:12], las=1, bty="l", pch=19, ylim=mylim, xlab="# mismatch allowed", ylab="Uniquely mapped %", main=mysample)
+  # on D2 reference
+  points(c(0:10),D2all[mysample,2:12], las=1, bty="l", pch=19, col="tan")
+}
+```
+
+## Difference in mapping
+
+```{r STAR_DifferenceInMapping}
+for(stat in 2:ncol(D2all)){
+  plot(B6mm10all[,stat]-D2all[,stat], 
+       main=paste(names(D2all)[stat], "(B6 - D2)"),
+       pch=19, las=2)
+}
+```
+
+# Kallisto stats
+
+```{r kallisto}
+# D2 and B6 stats on the same plot
+
+# plot uniquely mapped
+mylim <- c(min(n_unique_B6mm10$V1/n_processed_B6mm10$V1, n_unique_D2$V1/n_processed_D2$V1), max(n_unique_B6mm10$V1/n_processed_B6mm10$V1, n_unique_D2$V1/n_processed_D2$V1))*100
+plot(n_unique_B6mm10$V1/n_processed_B6mm10$V1*100, col="black", bg="black",
+     pch=19, ylim=mylim, las=1,
+     main="Uniquely mapped with Kallisto", xaxt="n", xlab="", ylab="Uniquely mapped percentage")
+points(n_unique_D2$V1/n_processed_D2$V1*100, pch=19, col="tan", bg="tan")
+for(myline in seq(0,2,0.5)){
+        axis(1, at=86.5, line=myline, labels=c(""))
+}
+axis(1, at=c(43,129), line=0, tick=FALSE, labels=c("cortex", "liver"))
+legend("topleft", legend=c("B6mm10","D2"), col=c("black","tan"), pch=19, title="Reference")
+
+# plot multi mapped
+mylim <- range((n_pseudoaligned_B6mm10$V1-n_unique_B6mm10$V1)/n_processed_B6mm10$V1, (n_pseudoaligned_D2$V1-n_unique_D2$V1)/n_processed_D2$V1)*100
+plot((n_pseudoaligned_B6mm10$V1-n_unique_B6mm10$V1)/n_processed_B6mm10$V1*100, col="black", bg="black",
+     pch=19, ylim=mylim, las=1,
+     main="Multi-mapped with Kallisto", xaxt="n", xlab="", ylab="Pseudoaligned percentage")
+points((n_pseudoaligned_D2$V1-n_unique_D2$V1)/n_processed_D2$V1*100, pch=19, col="tan", bg="tan")
+for(myline in seq(0,2,0.5)){
+        axis(1, at=86.5, line=myline, labels=c(""))
+}
+axis(1, at=c(43,129), line=0, tick=FALSE, labels=c("cortex", "liver"))
+legend("bottomleft", legend=c("B6mm10","D2"), col=c("black","tan"), pch=19, title="Reference")
+
+# plot pseudoaligned
+mylim <- range(n_pseudoaligned_B6mm10$V1/n_processed_B6mm10$V1, n_pseudoaligned_D2$V1/n_processed_D2$V1)*100
+plot(n_pseudoaligned_B6mm10$V1/n_processed_B6mm10$V1*100, col="black", bg="black",
+     pch=19, ylim=mylim, las=1,
+     main="Pseudomapping with Kallisto", xaxt="n", xlab="", ylab="Pseudoaligned percentage")
+points(n_pseudoaligned_D2$V1/n_processed_D2$V1*100, pch=19, col="tan", bg="tan")
+for(myline in seq(0,2,0.5)){
+        axis(1, at=86.5, line=myline, labels=c(""))
+}
+axis(1, at=c(43,129), line=0, tick=FALSE, labels=c("cortex", "liver"))
+legend("topleft", legend=c("B6mm10","D2"), col=c("black","tan"), pch=19, title="Reference")
+
+# plot unmapped
+mylim <- range(100-n_pseudoaligned_B6mm10$V1/n_processed_B6mm10$V1*100, 100-n_pseudoaligned_D2$V1/n_processed_D2$V1*100)
+plot(100-n_pseudoaligned_B6mm10$V1/n_processed_B6mm10$V1*100, col="black", bg="black",
+     pch=19, ylim=mylim, las=1,
+     main="Unmapped with Kallisto", xaxt="n", xlab="", ylab="Unmapped percentage")
+points(100-n_pseudoaligned_D2$V1/n_processed_D2$V1*100, pch=19, col="tan", bg="tan")
+for(myline in seq(0,2,0.5)){
+        axis(1, at=86.5, line=myline, labels=c(""))
+}
+axis(1, at=c(43,129), line=0, tick=FALSE, labels=c("cortex", "liver"))
+legend("bottomleft", legend=c("B6mm10","D2"), col=c("black","tan"), pch=19, title="Reference")
+```
+
+# Discussion
+
+Difference between the 2 tissues! Why?
+
+Ideas to go further:
+
+* Be less restrictive on introns, indels, and soft-clipping? (aka just restrict mismatches)
+* Check in other tissues (BXD samples from Bernard Thorens group used by Maxime for variant calling)?
+
+# R session info
+
+```{r sessionInfo}
+sessionInfo()
+```
+

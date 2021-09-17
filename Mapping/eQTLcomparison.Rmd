@@ -1,0 +1,118 @@
+---
+title: "eQTL comparison"
+author: "Nastassia Gobet"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    code_folding: hide
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    df_print: paged
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, fig.path="Graphs/eQTLcomparison/", warning=TRUE)
+
+#load needed libraries
+library(knitr)
+library(vioplot)
+library(VennDiagram)
+
+# set working directory
+##setwd("F:/BXD/analysis/Mapping")
+```
+
+# Goal
+
+Compare cis-eQTL from B6 mm10 or BXD specific references.
+
+Compare:
+
+* marker ID: identical or not
+* slope 5% 
+* qvalue
+
+# Function definitions
+
+## Difference is within 5% of average
+
+```{r}
+# check if difference is within 5% of average
+percentagediff <- function(x1, x2){
+  diff <- x1-x2
+  average <- apply(cbind(x1, x2), MARGIN=1, FUN=mean)
+
+  return(abs(diff/average))
+}
+```
+
+## Loading, processing, and plotting
+
+```{r}
+# load, process, and plot cis-eQTL comparison
+plotVennSimilarat5percent <- function(tissue, condition){
+  # Loading data
+  eQTLB6 <- read.table(paste0("F:/BXD/data/transcriptome/eQTL_B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_", tissue, "_", condition, "_grouped.tab"), header=TRUE, row.names=1, stringsAsFactors=FALSE)
+  eQTLBXD <- read.table(paste0("F:/BXD/data/transcriptome/eQTL_BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_", tissue, "_", condition, "_grouped.tab"), header=TRUE, row.names=1, stringsAsFactors=FALSE)
+
+  # remove genes with marker NA
+  ce_mm10_noNA <- eQTLB6[which(!is.na(eQTLB6$marker)), ]
+  ce_BXD_noNA <- eQTLBXD[which(!is.na(eQTLBXD$marker)), ]
+
+  commongenes <- intersect(rownames(ce_mm10_noNA), rownames(ce_BXD_noNA))
+  samemarker <- commongenes[which(ce_BXD_noNA[commongenes, "marker"]==ce_mm10_noNA[commongenes, "marker"])]
+  similarslope <- commongenes[which(percentagediff(ce_BXD_noNA[commongenes, "slope"], ce_mm10_noNA[commongenes, "slope"])<0.05)]
+  similarqvalue <- commongenes[which(percentagediff(ce_BXD_noNA[commongenes, "adjustedpvalue"], ce_mm10_noNA[commongenes, "adjustedpvalue"])<0.05)]
+
+  venn.plot <- venn.diagram(
+    x=list(marker=samemarker, slope=similarslope, qvalue=similarqvalue),
+    filename=NULL,
+    main=paste0("cis-eQTL in ", tissue, " ", condition, " (similar at 5%)"),
+    fontfamily="sans",
+    main.fontfamily="sans",
+    cex=1.5,
+    cat.cex=1.5,
+    main.cex=2,
+    cat.fontfamily="sans",
+    print.mode=c("raw", "percent"),
+    fill=c("lightgreen", "cornflowerblue", "red"),
+    alpha=c(0.75, 0.5, 0.25)
+  );
+
+  grid.draw(venn.plot)
+}
+```
+
+
+# Analysis {.tabset}
+
+```{r Venn, results='asis', fig.height=6}
+tissues <- c("Cortex", "Liver")
+conditions <- c("NSD", "SD")
+
+# plot for each BXD line
+for(tissue in tissues){
+  for(condition in conditions){
+    # generate the header
+    cat(paste0("\n\n## ", tissue, " ", condition, "\n"))
+    grid.newpage()
+    plotVennSimilarat5percent(tissue, condition)
+  }
+}
+```
+
+
+# Session information
+
+```{r}
+sessionInfo()
+```

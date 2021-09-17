@@ -1,0 +1,152 @@
+---
+title: "Characterizing excluded genes"
+author: "Nastassia Gobet"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    keep_md: no
+    code_folding: hide
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    df_print: paged
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, fig.path="Graphs/", warning=TRUE)
+
+#load needed libraries
+library(knitr)
+library(limma)
+library(edgeR)
+
+# set working directory
+##setwd("F:/BXD/analysis/Mapping/CharacterizingExcludedGenes")
+```
+
+# Goal
+
+Try to characterize genes that were excluded from the eQTL detection with applying no filtering. The aim is to gain maybe insights on how to do the filtering.
+
+# Info
+
+The mapping setting is "genotypesandimputed_withannotation_Local_0_2" with STAR, which means:
+
+* The reference is B6 (ENSEMBL) modified by BXD line using GeneNetwork genotypes + genotypes imputed from D2-specific dbSNP with D2 blocks method.
+* The transcriptome annotation is used (ENSEMBL).
+* Trimming at the ends of the reads is allowed.
+* Maximum 2 mismatches per read are allowed (on 100 bp single-ended reads).
+
+The normalization used is TMM from edgeR package on cpm, then transformed to log2 cpm.
+
+No filtering was used (called "0" in the files).
+
+# Analysis
+
+```{r}
+# retrieve gene counts, formate, and split by tissue
+GeneConvert <- read.table("F:/BXD/references/gene_names_B6mm10.tab", header=FALSE, stringsAsFactors=FALSE, sep="\t")
+LinesNames <- read.table("F:/BXD/data/ConvertLineNames.tsv", header=FALSE, stringsAsFactors=FALSE, sep="\t")
+path <- "F:/BXD/data/transcriptome/2_mapping_STAR/MappingParametersOptimization/genotypesandimputed_withannotation_Local_0_2/"
+all_counts <- read.table(paste0(path, "Summary_ReadsPerGene.out.tab"), sep='\t', header=TRUE, stringsAsFactors=FALSE, row.names="GeneID")
+colnames(all_counts) <- gsub("X", "C", colnames(all_counts))
+idx_gene <- grep("ENSMUSG", rownames(all_counts), value=FALSE)
+idx_uniq <- which(!duplicated(GeneConvert$V2[match(rownames(all_counts), GeneConvert$V1)]))
+idx_keep <- intersect(idx_gene, idx_uniq)
+all_counts <- all_counts[idx_keep,]
+rownames(all_counts) <- GeneConvert$V2[match(rownames(all_counts), GeneConvert$V1)]
+cortex_counts <- subset(all_counts, select=grep("C", colnames(all_counts)))
+liver_counts <- subset(all_counts, select=grep("L", colnames(all_counts)))
+
+# filter lowly expressed genes
+dC <- DGEList(counts=cortex_counts)
+dL <- DGEList(counts=liver_counts)
+
+# retrieve excluded gene list
+excludedGenesCNSD <- read.table("F:/BXD/data/transcriptome/FilteringTesting/eQTL/TMMnormalized_log2CPM_Cortex_NSD_0_PhenoToExclude.txt", stringsAsFactors=FALSE)
+excludedGenesCSD <- read.table("F:/BXD/data/transcriptome/FilteringTesting/eQTL/TMMnormalized_log2CPM_Cortex_SD_0_PhenoToExclude.txt", stringsAsFactors=FALSE)
+excludedGenesLNSD <- read.table("F:/BXD/data/transcriptome/FilteringTesting/eQTL/TMMnormalized_log2CPM_Liver_NSD_0_PhenoToExclude.txt", stringsAsFactors=FALSE)
+excludedGenesLSD <- read.table("F:/BXD/data/transcriptome/FilteringTesting/eQTL/TMMnormalized_log2CPM_Liver_SD_0_PhenoToExclude.txt", stringsAsFactors=FALSE)
+```
+
+How many excluded genes (without or with duplicates: genes excluded in more than one tissue or condition)?
+
+```{r}
+# excluded genes total without duplicates
+length(unique(c(excludedGenesCNSD$V1,excludedGenesCSD$V1,excludedGenesLNSD$V1,excludedGenesLSD$V1)))
+# excluded genes total with duplicates
+length(c(excludedGenesCNSD$V1,excludedGenesCSD$V1,excludedGenesLNSD$V1,excludedGenesLSD$V1))
+```
+
+Looking into more details in the Cortex NSD.
+
+Is there a difference in mean or standard deviation (sd) between excluded genes and non excluded?
+
+```{r}
+# excluded genes have a lower expression
+meandC <- apply(dC$counts, MARGIN=1, FUN=mean)
+mediandC <- apply(dC$counts, MARGIN=1, FUN=median)
+sddC <- apply(dC$counts, MARGIN=1, FUN=sd)
+t.test(meandC~as.factor(is.element(rownames(dC$counts), excludedGenesCNSD$V1)))
+
+# excluded genes have a lower standard deviation
+t.test(sddC~as.factor(is.element(rownames(dC$counts), excludedGenesCNSD$V1)))
+```
+
+Yes, difference in mean and sd.
+
+How many genes excluded have 0 mean and variance?
+How many genes excluded have low mean and variance?
+
+```{r}
+length(intersect(names(which(meandC==0&sddC==0)), excludedGenesCNSD$V1))
+length(intersect(names(which(meandC<1&sddC<1)), excludedGenesCNSD$V1))
+```
+
+None of the excluded genes have 0 mean and variance. All genes excluded have low variance and mean expression.
+
+Are all genes with low average expression excluded?
+
+```{r}
+plot(meandC[names(which(meandC<1))], pch=20, main="mean expression of all genes (with mean below 1)", ylab="mean")
+plot(meandC[excludedGenesCNSD$V1], pch=20, main="mean expression of excluded genes", ylab="mean")
+```
+
+No, not all genes with low average expression are excluded.
+
+Are all genes with low variance excluded?
+
+```{r}
+plot(sddC[names(which(sddC<1))], pch=20, main="sd of all genes (with sd below 1)", ylab="sd")
+plot(sddC[excludedGenesCNSD$V1], pch=20, main="sd of excluded genes", ylab="sd")
+```
+
+No, not all genes with low variance are excluded.
+
+Quick check of biotypes of excluded genes:
+
+```{bash eval=FALSE, include=TRUE}
+# biotypes of all genes
+grep -w "gene" references/transcriptome/Mus_musculus.GRCm38.94.gtf | grep -o "gene_biotype \"[a-zA-Z_]\{1,\}\"" | cut -d \" -f 2 | sort | uniq -c
+
+# biotypes of excluded genes
+grep -w -f /mnt/nas/BXD/data/transcriptome/FilteringTesting/eQTL/TMMnormalized_log2CPM_Cortex_NSD_0_PhenoToExclude.txt references/transcriptome/Mus_musculus.GRCm38.94.gtf | grep -w "gene" | grep -o "gene_biotype \"[a-zA-Z_]\{1,\}\"" | cut -d \" -f 2 | sort | uniq -c
+```
+
+# Conclusion
+
+The genes excluded have low variance and low average expression. However they have not an average of 0 and a standard deviation of 0. Also, some genes have a lower average or sd expression than excluded genes and are not excluded. The excluded genes have less protein_coding than the total, but still some (~100 on ~650 genes excluded).
+
+# Session information
+
+```{r}
+sessionInfo()
+```

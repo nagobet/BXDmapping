@@ -1,0 +1,299 @@
+---
+title: "Differential Expression-like analysis"
+author: "Nastassia Gobet, Maxime Jan"
+date: '3 September 2019 - '
+output:
+  html_document:
+    code_folding: hide
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    df_print: paged
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, warning=TRUE, fig.path="Graphs/DMmm10STARvsKallisto/")
+
+# set working directory
+##setwd("F:/BXD/analyses/Mapping")
+
+# loading needed pacakges
+library(knitr)
+##if (!requireNamespace("BiocManager"))
+##  install.packages("BiocManager")
+##BiocManager::install()
+##BiocManager::install(c('edgeR', 'DESeq'))
+library(edgeR)
+library(limma)
+```
+
+# GOAL
+
+Perform differential expression-like analysis, expect that to compare STAR (alignment) vs Kallisto (pseudo-alignment) mapping on B6 mm10 primary assembly (refered after as B6). Differential mapping analysis.
+
+# DATA
+
+## gene expression table
+
+The input data are raw counts of gene expression (counted per sample by ht-count, then grouped). Rows are genes and columns are libraries/samples. (One library per sample, no replicate except for parental lines). Samples are mouse lines + condition (SD or NSD).
+
+### Loading
+
+```{r LoadingSTAR}
+# load STAR counts
+countsCortexSTAR <- read.table("F:/BXD/data/transcriptome/3_counting_htseq/B6mm10/count_B6mm10_cortex.txt", header=TRUE, row.names=1, stringsAsFactors=FALSE)
+countsLiverSTAR <- read.table("F:/BXD/data/transcriptome/3_counting_htseq/B6mm10/count_B6mm10_liver.txt", header=TRUE, row.names=1, stringsAsFactors=FALSE)
+
+# load B6 mm10 geneID to gene name convert table
+B6mm10geneConvert <- read.table("F:/BXD/references/gene_names_B6mm10.tab", header=FALSE, stringsAsFactors=FALSE, sep=" ")
+colnames(B6mm10geneConvert) <- c("GeneID", "GeneName")
+# remove B6 replicate gene names
+B6mm10geneConvert <- B6mm10geneConvert[-which(duplicated(B6mm10geneConvert$GeneName)),]
+rownames(B6mm10geneConvert) <- 1:nrow(B6mm10geneConvert)
+### could be improved by adding the counts from different transcripts
+
+# try to find B6 matching names
+idx <- na.omit(match(rownames(countsCortexSTAR),B6mm10geneConvert$GeneID))
+# take B6 subset
+countsCortexSTAR <- countsCortexSTAR[B6mm10geneConvert$GeneID[idx],]
+countsLiverSTAR <- countsLiverSTAR[B6mm10geneConvert$GeneID[idx],]
+# convert B6 rownames (GeneID) into gene name
+rownames(countsCortexSTAR) <- B6mm10geneConvert$GeneName[idx]
+rownames(countsLiverSTAR) <- B6mm10geneConvert$GeneName[idx]
+```
+
+```{r LoadingKallisto}
+# load Kallisto counts
+RNA <- read.table("F:/BXD/data/transcriptome/2.5_quantification_Kallisto/GSE114845-expression.txt.txt", header=TRUE, stringsAsFactors=FALSE)
+Meta <- read.table("F:/BXD/data/transcriptome/2.5_quantification_Kallisto/GSE114845-metadata.txt.txt", sep="\t", header=TRUE, stringsAsFactors=FALSE)
+
+# formatting
+##Meta$oldname <- Meta$genotype
+##Meta$oldname <- gsub("BXD/TyJ","BXD",Meta$oldname)
+##Meta$oldname <- gsub("BXD/RwwJ","BXD",Meta$oldname)
+##Meta$oldname[grepl("B61",Meta$Sample.Title)] <- "B61"
+##Meta$oldname[grepl("B62",Meta$Sample.Title)] <- "B62"
+##Meta$oldname[grepl("DB1",Meta$Sample.Title)] <- "DB1"
+##Meta$oldname[grepl("DB2",Meta$Sample.Title)] <- "DB2"
+##Meta$oldname[grepl("DB2",Meta$Sample.Title)] <- "DB2"
+##Meta$oldname[grepl("DB",Meta$Sample.Title) & Meta$genotype %in% "DBA/2J x C57/BL/J F1"] <- "DB"
+##Meta$oldname[grepl("BD",Meta$Sample.Title) & Meta$genotype %in% "C57/BL/J x DBA/2J F1"] <- "BD"
+##Meta$oldname <- gsub("BXD ","BXD",Meta$oldname)
+##Meta$oldname[grepl("BXD73b",Meta$oldname)] <- "BXD103"
+##Meta$oldname[grepl("BXD48a",Meta$oldname)] <- "BXD96"
+##Meta$oldname[grepl("BXD65a",Meta$oldname)] <- "BXD97"
+##Meta$oldname <- gsub("BXD","BXD0",Meta$oldname)
+##Meta$oldname <- gsub("BXD0100","BXD100",Meta$oldname)
+##Meta$oldname <- gsub("BXD0101","BXD101",Meta$oldname)
+##Meta$oldname <- gsub("BXD0103","BXD103",Meta$oldname)
+
+rownames(Meta) <- Meta$Sample_geo_accession
+rownames(RNA) <- RNA$gene_symbol
+
+countsCortexKallisto <- RNA[,Meta$Sample_geo_accession[Meta$tissue == "Cortex" ]]
+##Meta_cortex <- Meta[Meta$tissue == "Cortex" ,]
+
+countsLiverKallisto <- RNA[,Meta$Sample_geo_accession[Meta$tissue == "Liver"]]
+##Meta_liver <- Meta[Meta$tissue == "Liver",]
+```
+
+In B6 mm10 STAR counts, there are `r nrow(countsCortexSTAR)` genes in cortex and `r nrow(countsLiverSTAR)` genes in liver.
+In B6 mm10 Kallisto counts, there are `r nrow(countsCortexKallisto)` genes in cortex and `r nrow(countsLiverKallisto)` genes in liver.
+
+## match gene names
+
+```{r}
+# find which genes are common between STAR and Kallisto
+commongenes <- intersect(rownames(countsCortexSTAR), rownames(countsCortexKallisto))
+# subset
+countsCortexSTAR <- countsCortexSTAR[commongenes,]
+countsLiverSTAR <- countsLiverSTAR[commongenes,]
+countsCortexKallisto <- countsCortexKallisto[commongenes,]
+countsLiverKallisto <- countsLiverKallisto[commongenes,]
+```
+
+We have now `r length(commongenes)` genes.
+
+## splitting
+
+```{r}
+# add software to column names
+colnames(countsCortexSTAR) <- paste(colnames(countsCortexSTAR),"STAR", sep="_")
+colnames(countsLiverSTAR) <- paste(colnames(countsLiverSTAR),"STAR", sep="_")
+colnames(countsCortexKallisto) <- paste(colnames(countsCortexKallisto),"Kallisto", sep="_")
+colnames(countsLiverKallisto) <- paste(colnames(countsLiverKallisto),"Kallisto", sep="_")
+# reorganize into liver dataset and liver dataset
+countsCortex <- cbind(countsCortexSTAR,countsCortexKallisto)
+countsLiver <- cbind(countsLiverSTAR,countsLiverKallisto)
+```
+
+# Analysis
+
+## Filtering
+
+We want to filter the expression data to take only gene with average expression above 10. This is an arbitrary threshold to remove genes that are of low abundance, more likely to be noisy.
+
+```{r filtering}
+# create a subset of the count table, filtering out rows (genes) with average counts <= 10
+countsCortex <- countsCortex[which(apply(countsCortex, MARGIN=1, FUN=mean)>10),]
+countsLiver <- countsLiver[which(apply(countsLiver, MARGIN=1, FUN=mean)>10),]
+```
+
+The filtered datasets have `r nrow(countsCortex)` genes in cortex and `r nrow(countsLiver)` genes in liver.
+
+## Standarization
+
+The normalization is performed using the Weighted trimmed mean of M-values (TMM) method of the edgeR package. This step standarizes the counts gene expression to take into account the variation in library size (=number of counts per library), the variation in length of the transcripts, and in RNA population variation. (Robinson, Genome Biology, 2010).
+
+
+```{r Normalization}
+# formatting for edgeR (creates a DGEList object from the dataframe)
+dC <- DGEList(counts=countsCortex)
+dL <- DGEList(counts=countsLiver)
+
+# calculate the normalization factors for each sample TMM method (effective library size)
+dC <- calcNormFactors(dC, method="TMM")
+dL <- calcNormFactors(dL, method="TMM")
+
+# calculate CPM and normalize the counts 
+normalizedCPMcountsCortex <- data.frame(cpm(dC, normalized.lib.sizes=TRUE))
+normalizedCPMcountsLiver <- data.frame(cpm(dL, normalized.lib.sizes=TRUE))
+
+# Export normalized CPM
+write.table(normalizedCPMcountsCortex, file="F:/BXD/data/transcriptome/4_normalization/STARKallisto_edgeRTMMnormalized_CPM_Cortex.tab", row.names=TRUE, sep="\t", quote=FALSE)
+write.table(normalizedCPMcountsLiver, file="F:/BXD/data/transcriptome/4_normalization/STARKallisto_edgeRTMMnormalized_CPM_Liver.tab", row.names=TRUE, sep="\t", quote=FALSE)
+```
+
+## Differential gene mapping
+
+Find which genes appear up- or down-regulated if mapping with STAR or Kallisto.
+
+This is done here using voom from limma package.
+
+```{r DifferentialMappingcortex}
+# prepare the design
+variables <- matrix(unlist(strsplit(colnames(normalizedCPMcountsCortex), "_")), ncol=2, byrow=TRUE)
+colnames(variables) <- c("samplename","mappingref")
+strains <- gsub("_Kallisto","",variables[,"samplename"])
+strains <- factor(gsub("_STAR","",variables[,"samplename"]))
+design <- model.matrix(~strains+factor(variables[,"mappingref"]))
+
+# by default the normalization method is quantile (voom calls normalizeBetweenArrays)
+# plot the mean-variance trend
+##res <- voom(countsCortex, design, plot=TRUE, lib.size=colSums(countsCortex)*dC$samples$norm.factors)
+resC <- voom(dC, design, plot=TRUE)
+resCortexNorm <- resC$E
+
+# fitting
+# fit the coefficient of the linear model
+fitC <- lmFit(resC, design)
+# calculates the t-statistics
+fitC2 <- eBayes(fitC)
+
+# write all results
+resultTable <- topTable(fitC2, coef=ncol(fitC$coefficients), adjust="fdr", sort.by="B", number=1000000)
+# sort by adjusted p-value
+resultTable <- resultTable[order(resultTable$adj.P.Val),]
+
+# store information about DE analysis
+write.table(resultTable, file="F:/BXD/data/transcriptome/5_DifferentialMapping/DifferentialMappingSTARKallisto_Limma_Cortex.txt", row.names=TRUE, sep="\t", quote=FALSE)
+```
+
+```{r DifferentialMappingLiver}
+# prepare the design
+variables <- matrix(unlist(strsplit(colnames(normalizedCPMcountsLiver), "_")), ncol=2, byrow=TRUE)
+colnames(variables) <- c("samplename","mappingref")
+strains <- factor(gsub("[Cnsd]","",variables[,"samplename"]))
+design <- model.matrix(~strains+factor(variables[,"mappingref"]))
+
+# by default the normalization method is quantile (voom calls normalizeBetweenArrays)
+# plot the mean-variance trend
+##res <- voom(countsLiver, design, plot=TRUE, lib.size=colSums(countsLiver)*dL$samples$norm.factors)
+resL <- voom(dL, design, plot=TRUE)
+resLiverNorm <- resL$E
+
+# fitting
+# fit the coefficient of the linear model
+fitL <- lmFit(resL, design)
+# calculates the t-statistics
+fitL2 <- eBayes(fitL)
+
+# write all results
+resultTable <- topTable(fitL2, coef=ncol(fitL$coefficients), adjust="fdr", sort.by="B", number=1000000)
+# sort by adjusted p-value
+resultTable <- resultTable[order(resultTable$adj.P.Val),]
+
+# store information about DE analysis
+write.table(resultTable, file="F:/BXD/data/transcriptome/5_DifferentialMapping/DifferentialMappingSTARKallisto_Limma_Liver.txt", row.names=TRUE, sep="\t", quote=FALSE)
+```
+
+# Plotting results
+
+Volcano plots
+
+```{r PlottingResults, fig.width=4}
+# load table with results of differential expression
+DMdata_Cortex <- read.table('F:/BXD/data/transcriptome/5_DifferentialMapping/DifferentialMappingSTARKallisto_Limma_Cortex.txt', sep="\t")
+DMdata_Liver <- read.table('F:/BXD/data/transcriptome/5_DifferentialMapping/DifferentialMappingSTARKallisto_Limma_Liver.txt', sep="\t")
+
+# volcano plot all transcripts in black and significant in red
+# set the colors
+palette(c("black", "brown3"))
+
+# plot for Cortex
+plot(1:nrow(DMdata_Cortex), DMdata_Cortex$logFC, las=1, pch=20, col=as.factor(DMdata_Cortex$adj.P.Val<=0.05),
+       main="DM in Cortex", xlab="rank of adjusted p-value", ylab="-logFC")
+
+# plot for Liver
+plot(1:nrow(DMdata_Liver), DMdata_Liver$logFC, las=1, pch=20, col=as.factor(DMdata_Liver$adj.P.Val<=0.05),
+       main="DM in Liver", xlab="rank of adjusted p-value", ylab="-logFC")
+```
+
+The -logFC represents ratio of STAR over Kallisto (positive values map better with STAR, negative values map better with Kallisto).
+
+`r round(length(which(DMdata_Cortex$adj.P.Val<=0.05))/length(DMdata_Cortex$adj.P.Val)*100)`% of genes are significantly (below or equal to 0.05) differentially mapped in cortex, and `r round(length(which(DMdata_Liver$adj.P.Val<=0.05))/length(DMdata_Liver$adj.P.Val)*100)`% in liver.
+
+```{r}
+# get top 5 up- and top 5 down-measured genes
+DMdata_Cortex <- DMdata_Cortex[order(DMdata_Cortex$logFC),]
+head(DMdata_Cortex,5)
+print(head(DMdata_Cortex[,c("logFC","adj.P.Val")],5))
+tail(DMdata_Cortex,5)
+print(tail(DMdata_Cortex[,c("logFC","adj.P.Val")],5))
+
+DMdata_Liver <- DMdata_Liver[order(DMdata_Liver$logFC),]
+head(DMdata_Liver,5)
+print(head(DMdata_Liver[,c("logFC","adj.P.Val")],5))
+tail(DMdata_Liver,5)
+print(tail(DMdata_Liver[,c("logFC","adj.P.Val")],5))
+
+for (mytissue in c("Cortex","Liver")){
+  completelist <- rownames(get(paste("DMdata_", mytissue, sep="")))
+  for (mygene in c(head(completelist, 5), tail(completelist, 5))){
+    print(boxplot(as.numeric(get(paste("res", mytissue, "Norm", sep=""))[mygene,]) ~ factor(variables[, "mappingref"]), main=paste(mygene, "in", mytissue), xlab="Reference", ylab="Normalized (TMM, voom) log2 cpm gene expression"))
+  }
+}
+
+# how many have a log fold change (absolute value) above 2?
+length(which(abs(DMdata_Cortex$logFC)>2))
+length(which(abs(DMdata_Liver$logFC)>2))
+```
+
+```{r}
+# testing
+plot(DMdata_Liver$adj.P.Val, pch=19)
+
+plot(DMdata_Liver$adj.P.Val,DMdata_Liver$logFC, pch=19)
+
+plot(log(DMdata_Liver$adj.P.Val),DMdata_Liver$logFC, pch=19)
+points(log(DMdata_Liver$adj.P.Val[abs(DMdata_Liver$adj.P.Val)<0.001]),DMdata_Liver$logFC[abs(DMdata_Liver$adj.P.Val)<0.001], pch=19, col="tomato3")
+```
+

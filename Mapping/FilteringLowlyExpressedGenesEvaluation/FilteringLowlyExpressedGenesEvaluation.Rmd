@@ -1,0 +1,253 @@
+---
+title: "Filtering Lowly Expressed Genes Evaluation"
+author: "Nastassia Gobet"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    keep_md: no
+    code_folding: hide
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    df_print: paged
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, fig.path="Graphs/", warning=TRUE)
+
+# load needed libraries
+library(yaml)
+library(tools)
+library(htmltools)
+library(rmarkdown)
+library(knitr)
+library(Rcpp)
+library(locfit)
+library(lattice)
+library(digest)
+library(grid)
+library(jsonlite)
+library(magrittr)
+library(evaluate)
+library(rlang)
+library(stringi)
+library(stringr)
+library(xfun)
+library(compiler)
+library(limma)
+library(edgeR)
+
+# set working directory
+##setwd("F:/BXD/analysis/Mapping/FilteringLowlyExpressedGenesEvaluation")
+```
+
+# GOAL
+
+The goal is to test the influence of different methods for filtering of lowly expressed genes on eQTL detection.
+
+# Background
+
+RNA-seq allows a wide range of genes detection but there is still sampling noise particularly for lowly expressed genes. Therefore, filter out lowly expressed genes is important, but it is unclear what filtering should be used.
+
+A interesting study (Effect of low-expression gene filtering on detection of differentially expressed genes in RNA-seq data, Sha, 2015, Conf Proc IEEE Eng Med Biol Soc) is comparing different filtering methods on a human dataset. They use the differentially expressed genes (universal vs brain), validated with qPCR results, to see the effect of various reads mapping, gene counting, gene normalization (and DE detection), and reference transcriptome annotation. They concluded that filtering improves sensitivity of DE, and the optimal threshold depends on the RNA-seq pipeline, but correlates well with the threshold maximizing the number of DE genes (which is useful for dataset where the true DE genes are unknown). Their best combinaison is mapslice as mapper, HTSeq as gene counter, limma-voom for normalization and DE detection, and Ensembl for transcriptome annotation with a 10% threshold on the average gene counts.
+
+So far, I was doing filtering like Maxime: counts are grouped by tissue (66 samples), and genes with less than 20 samples with more than 0.5 cpm are filtered out. This means 2 thresholds: minimal cpm value, and minimal number of samples with sufficient cpm value.
+
+# Plan of analysis
+
+Variables:
+
+* certain number of samples (min_samples) with minimal average cpm (min_cpm):
+  * 0.5 cpm, 44 samples (2/3 of samples)
+  * 0.5 cpm, 22 samples (1/3 of samples)
+  * 0.5 cpm, 11 samples (1/6 of samples)
+  * **0.5 cpm, 20 samples**
+  * 1 cpm, 20 samples
+  * 0.1 cpm, 20 samples
+* average gene counts with threshold values:
+  * 0% (notice this means no filtering)
+  * 75%
+* Minimum number of samples with not 0 counts
+  * 0 (0% of samples) this is the same as no filtering
+  * 16 (~25% of samples)
+  * 33 (50% of samples)
+  * 49 (~75% of samples)
+  * 66 (100% of samples)
+
+So a total of 9 filterings.
+
+Evaluation of filtering by looking number of eQTLs and ratio eQTLs/filter in genes.
+
+The mapping setting is "genotypesandimputed_withannotation_Local_0_2" with STAR, which means:
+
+* The reference is B6 (ENSEMBL) modified by BXD line using GeneNetwork genotypes + genotypes imputed from D2-specific dbSNP with D2 blocks method.
+* The transcriptome annotation is used (ENSEMBL).
+* Trimming at the ends of the reads is allowed.
+* Maximum 2 mismatches per read are allowed (on 100 bp single-ended reads).
+
+# Analysis
+
+## Exploring reasonable range for thresholds
+
+```{r exploringCounts}
+GeneConvert <- read.table("F:/BXD/references/gene_names_B6mm10.tab", header=FALSE, stringsAsFactors=FALSE, sep="\t")
+LinesNames <- read.table("F:/BXD/data/ConvertLineNames.tsv", header=FALSE, stringsAsFactors=FALSE, sep="\t")
+
+path <- "F:/BXD/data/transcriptome/2_mapping_STAR/MappingParametersOptimization/genotypesandimputed_withannotation_Local_0_2/"
+
+# load counts data, formate, and split by tissue
+all_counts <- read.table(paste0(path, "Summary_ReadsPerGene.out.tab"), sep='\t', header=TRUE, stringsAsFactors=FALSE, row.names="GeneID")
+colnames(all_counts) <- gsub("X", "C", colnames(all_counts))
+idx_gene <- grep("ENSMUSG", rownames(all_counts), value=FALSE)
+idx_uniq <- which(!duplicated(GeneConvert$V2[match(rownames(all_counts), GeneConvert$V1)]))
+idx_keep <- intersect(idx_gene, idx_uniq)
+all_counts <- all_counts[idx_keep,]
+rownames(all_counts) <- GeneConvert$V2[match(rownames(all_counts), GeneConvert$V1)]
+cortex_counts <- subset(all_counts, select=grep("C", colnames(all_counts)))
+liver_counts <- subset(all_counts, select=grep("L", colnames(all_counts)))
+
+# filter lowly expressed genes
+dC <- DGEList(counts=cortex_counts)
+dL <- DGEList(counts=liver_counts)
+
+# How many samples with sufficient cpm
+hist(rowSums(cpm(dC)>=0.5), breaks=66, main=0.5)
+quantile(rowSums(cpm(dC)>=0.5))
+hist(rowSums(cpm(dC)>=1), breaks=66, main=1)
+quantile(rowSums(cpm(dC)>=1))
+hist(rowSums(cpm(dC)>=0), breaks=66, main=0)
+quantile(rowSums(cpm(dC)>=0))
+hist(rowSums(cpm(dC)>=0.1), breaks=66, main=0.1)
+quantile(rowSums(cpm(dC)>=0.1))
+
+# Percentiles of average gene counts
+quantile(apply(dC, MARGIN=1, FUN=mean))
+quantile(apply(dC, MARGIN=1, FUN=median))
+quantile(apply(dC, MARGIN=1, FUN=sd))
+quantile(apply(dC, MARGIN=1, FUN=min))
+quantile(apply(dC, MARGIN=1, FUN=max))
+
+# genes with at least half the samples with more than 0 counts
+quantile(rowSums(dC$counts>0))
+hist(rowSums(dC$counts>0), breaks=66)
+```
+
+## Filtering and normalization
+
+This step was perform with script testingFiltering.R and I noticed that some values (log2 CPM) change if this is perform from Windows or from Linux. However, the difference is maximum of 1e$^{-13}$, so I decided to ignore it.
+
+The normalization used is TMM from edgeR package on cpm, then transformed to log2 cpm.
+
+## eQTL detection
+
+This step is perform by script eQTLdetectionFilteringTesting.sh with FastQTL software on the Wally cluster.
+
+* test association for a molecular phenotype only for variants that are 2 Mb above or below the transcription start site of the gene coding for the phenotype (--window 2e6, default is 1e6)
+* use seed one to help reproducibility of permutations (--seed 1, no default)
+* use the beta distribution approximation estimated from 1000 permutations to calculate adjusted p-values (--permute 1000, no default)
+
+## Evaluation of filtering
+
+For each tissue and condition the following measures are considered:
+
+* number of genes filtered in (kept)
+* number of eQTL detected
+* percentage eQTL over genes
+* number of eQTL with no marker
+* TODO number of phenotypes removed from eQTL detection because issue with permutations (number of lines in PhenoToExclude.txt if file exists)
+
+```{r retrieveFilteringTestingResults}
+# function to retrieve number of eQTLs and number of expressed genes
+retrieveeQTLstatsFilteringTesting <- function(filename){
+  # load data
+  data <- read.table(filename, stringsAsFactors=FALSE)
+  # retrieve number of significant eQTLs
+  sig <- length(which(data$adjustedpvalue<0.05))
+  # retrieve total number of genes
+  tot <- nrow(data)
+  # retrieve genes without marker
+  nomarker <- length(which(is.na(data$marker)))
+  return(c(nb_sig=sig, total=tot, ratio=sig/tot, "no marker"=nomarker))
+}
+
+retrieveeQTLstatsFilteringTesting <- Vectorize(retrieveeQTLstatsFilteringTesting)
+
+basepath <- "F:/BXD/data/transcriptome/FilteringTesting/eQTL/"
+settinglist <- list.files(path=basepath, pattern="pvalcorrected", full.names=FALSE, recursive=FALSE)
+settinglistCortexNSD <- grep("Cortex_NSD", settinglist, value=TRUE)
+settinglistCortexSD <- grep("Cortex_SD", settinglist, value=TRUE)
+settinglistLiverNSD <- grep("Liver_NSD", settinglist, value=TRUE)
+settinglistLiverSD <- grep("Liver_SD", settinglist, value=TRUE)
+
+FilteringTestingDataCortexNSD <- retrieveeQTLstatsFilteringTesting(paste0(basepath, settinglistCortexNSD))
+FilteringTestingDataCortexSD <- retrieveeQTLstatsFilteringTesting(paste0(basepath, settinglistCortexSD))
+FilteringTestingDataLiverNSD <- retrieveeQTLstatsFilteringTesting(paste0(basepath, settinglistLiverNSD))
+FilteringTestingDataLiverSD <- retrieveeQTLstatsFilteringTesting(paste0(basepath, settinglistLiverSD))
+
+# prepare names
+cleannames <- gsub("_pvalcorrected.txt", "", gsub("TMMnormalized_log2CPM_Cortex_NSD_", "", settinglistCortexNSD))
+colnames(FilteringTestingDataCortexNSD) <- cleannames
+colnames(FilteringTestingDataCortexSD) <- cleannames
+colnames(FilteringTestingDataLiverNSD) <- cleannames
+colnames(FilteringTestingDataLiverSD) <- cleannames
+
+# display tables
+as.data.frame(t(FilteringTestingDataCortexNSD))
+as.data.frame(t(FilteringTestingDataCortexSD))
+as.data.frame(t(FilteringTestingDataLiverNSD))
+as.data.frame(t(FilteringTestingDataLiverSD))
+```
+
+plotting results
+
+```{r FilteringTestingResults, fig.dim=c(10,7)}
+# each tissue and condtion separated
+var <- "ratio"
+plot(FilteringTestingDataCortexNSD[var,]*100, pch=19, main="Cortex NSD", xaxt="n", xlab="", ylab=var, las=1)
+axis(1, at=1:length(cleannames), labels=cleannames, las=2)
+plot(FilteringTestingDataCortexSD[var,]*100, pch=19, main="Cortex SD", xaxt="n", xlab="", ylab=var, las=1)
+axis(1, at=1:length(cleannames), labels=cleannames, las=2)
+plot(FilteringTestingDataLiverNSD[var,]*100, pch=19, main="Liver NSD", xaxt="n", xlab="", ylab=var, las=1)
+axis(1, at=1:length(cleannames), labels=cleannames, las=2)
+plot(FilteringTestingDataLiverSD[var,]*100, pch=19, main="Liver SD", xaxt="n", xlab="", ylab=var, las=1)
+axis(1, at=1:length(cleannames), labels=cleannames, las=2)
+
+# plot all tissues and condtions with merged setting order
+##layout(matrix(c(1,1,2,3,4), nrow=1, ncol=5, byrow=TRUE))
+par(mfrow=c(1,4))
+settings_order <- sort(sort(sort(FilteringTestingDataCortexNSD[var,], index.return=TRUE)$ix, index.return=TRUE)$ix+
+    sort(sort(FilteringTestingDataCortexSD[var,], index.return=TRUE)$ix, index.return=TRUE)$ix+
+    sort(sort(FilteringTestingDataLiverNSD[var,], index.return=TRUE)$ix, index.return=TRUE)$ix+
+    sort(sort(FilteringTestingDataLiverSD[var,], index.return=TRUE)$ix, index.return=TRUE)$ix, index.return=TRUE)$ix
+
+dotchart(FilteringTestingDataCortexNSD[var,][settings_order]*100, cex=1, labels=cleannames[settings_order], ylim=c(5,30), main=paste("Cortex", "NSD"), pch=19, col=c("darkmagenta","orchid"), xlab="significant eQTLs (%)")
+dotchart(FilteringTestingDataCortexSD[var,][settings_order]*100, cex=1, labels=cleannames[settings_order], ylim=c(5,30), main=paste("Cortex", "SD"), pch=19, col=c("darkmagenta","orchid"), xlab="significant eQTLs (%)")
+dotchart(FilteringTestingDataLiverNSD[var,][settings_order]*100, cex=1, labels=cleannames[settings_order], ylim=c(5,30), main=paste("Liver", "NSD"), pch=19, col=c("darkmagenta","orchid"), xlab="significant eQTLs (%)")
+dotchart(FilteringTestingDataLiverSD[var,][settings_order]*100, cex=1, labels=cleannames[settings_order], ylim=c(5,30), main=paste("Liver", "SD"), pch=19, col=c("darkmagenta","orchid"), xlab="significant eQTLs (%)")
+
+# differenciate groups by type of filtering
+par(mfrow=c(1,2))
+grps <- factor(c("averageCPM_samples", "averageCPM_samples", "averageCPM_samples", "averageCPM_samples", "averageCPM_samples", "averageCountsPercentile", "averageCPM_samples", "averageCountsPercentile", "minimalSamplesNot0", "minimalSamplesNot0", "minimalSamplesNot0", "minimalSamplesNot0"), levels = c("averageCPM_samples", "averageCountsPercentile", "minimalSamplesNot0"))
+dotchart(FilteringTestingDataCortexNSD[var,]*100, groups=grps, cex=1, labels=cleannames, xlim=c(0,30), main=paste("Cortex", "NSD"), pch=19, xlab="significant eQTLs (%)", las=1)
+dotchart(FilteringTestingDataCortexSD[var,]*100, groups=grps, cex=1, labels=cleannames, xlim=c(0,30), main=paste("Cortex", "SD"), pch=19, xlab="significant eQTLs (%)")
+dotchart(FilteringTestingDataLiverNSD[var,]*100, groups=grps, cex=1, labels=cleannames, xlim=c(0,30), main=paste("Liver", "NSD"), pch=19, xlab="significant eQTLs (%)")
+dotchart(FilteringTestingDataLiverSD[var,]*100, groups=grps, cex=1, labels=cleannames, xlim=c(0,30), main=paste("Liver", "SD"), pch=19, xlab="significant eQTLs (%)")
+```
+
+# Conclusion
+
+Not doing any filtering gives the less eQTLs percentage (even in absolute number of eQTLs it is not the best). The rest of the filtering are all better. Within the filtering, the lowest values are obtained by the more relaxed filtering (that let pass the more genes). Technically, the best parameters are min_cpm 1 and min_samples 20. However, the differences between the top filterings is negligeable. The filtering based on removing 75% of its genes is not so different from the optimal filtering tested here. This aspect seems different from Sha et al. 2015, since they report it is not worth filtering more than 20% of genes. I think this happens because our dataset has 2 main clusters of genes: most genes are lowly expressed and a few are highly expressed. So as long as the filtering limit is separating these two (and that is not very hard), the filtering seems fine. My hypothesis is that in Sha et al. the overall distribution is different with less lowly expressed genes than for us. A minimal number of samples with a count more than 0 is not stringent enough to reach top filtering levels. Only asking for all samples (66) to be above 0 is ok in cortex but not in liver.
+
+# Session information
+
+```{r}
+sessionInfo()
+```

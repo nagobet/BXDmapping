@@ -1,0 +1,127 @@
+---
+title: "RNA on genome"
+author: "Nastassia Gobet"
+date: "17-21 June 2019"
+output:
+  html_document:
+    code_folding: hide
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, fig.path="Graphs/", warning=TRUE)
+
+
+#load needed libraries
+library(knitr)
+##library(reshape)
+library(vioplot)
+
+# set working directory
+##setwd("F:/BXD/analyses/Comparison_mapping_B6vsD2/OnGenome")
+```
+
+# Data
+
+Loading data
+
+```{r}
+# load data
+B6mm10 <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenome/MappingStatisticsB6mm10_0mismatch.tsv", header=TRUE, stringsAsFactors=FALSE, row.names="Sample_Name")
+D2 <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenome/MappingStatisticsD2_0mismatch.tsv", header=TRUE, stringsAsFactors=FALSE, row.names="Sample_Name")
+
+# load SraTable (for GSM to condition/line/tissue conversion)
+sratable <- read.table("F:/BXD/data/transcriptome/RNAseq/SraRunTable.txt", sep="\t", header=TRUE, stringsAsFactors=FALSE)
+##sratable[, c("Sample_Name", "condition", "genotype", "tissue")]
+uniqSratmp <- unique(sratable[, c("Sample_Name", "condition", "genotype", "tissue")])
+# display table with information on samples
+##kable(uniqSra)
+# load table to convert mouse lines names
+MouseLines <- read.table("F:/BXD/data/BXDlinesConvert.tsv", sep="\t", header=FALSE, stringsAsFactors=FALSE)
+
+# clean mouse lines names in sra table
+uniqSra <- uniqSratmp
+rownames(uniqSra) <- 1:nrow(uniqSra)
+uniqSra$genotype <- MouseLines$V1[match(uniqSratmp$genotype,MouseLines$V2)]
+rm(uniqSratmp, MouseLines)
+```
+
+
+# Analysis
+
+Quick graph
+
+```{r}
+plot(B6mm10$Uniq0,D2$Uniq0)
+plot(B6mm10$Uniq1,D2$Uniq1)
+
+# exactly matching
+plot(B6mm10$Uniq0, pch=19, col="black", ylim=c(floor(min(B6mm10$Uniq0,D2$Uniq0)), ceiling(max(B6mm10$Uniq0,D2$Uniq0))), xaxt="n", ylab="Uniquely mapped percentage", xlab="Samples", main="0 mismatch allowed")
+points(D2$Uniq0, pch=19, col="tan")
+abline(v=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5))
+axis(1, at=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5), labels=rep(c(""),7))
+axis(1, at=c(c(2.5,5.5,8.5,11.5),12+c(2.5,5.5,8.5,11.5)), tick=FALSE, labels=rep(c("B6","BxD","D2","DxB"),2))
+for(myline in seq(0.5,2,0.5)){
+  axis(1, at=12.5, line=myline, labels=c(""))
+}
+axis(1, at=c(6.5,18.5), line=1, tick=FALSE, labels=c("cortex", "liver"))
+legend("bottomleft", title="Reference", legend=c("B6mm10","D2"), fill=c("black","tan"))
+
+# one mismatch allowed
+plot(B6mm10$Uniq1, pch=19, col="black", ylim=c(floor(min(B6mm10$Uniq1,D2$Uniq1)), ceiling(max(B6mm10$Uniq1,D2$Uniq1))), xaxt="n", ylab="Uniquely mapped percentage", xlab="Samples", main="1 mismatch allowed")
+points(D2$Uniq1, pch=19, col="tan")
+abline(v=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5))
+axis(1, at=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5), labels=rep(c(""),7))
+axis(1, at=c(c(2.5,5.5,8.5,11.5),12+c(2.5,5.5,8.5,11.5)), tick=FALSE, labels=rep(c("B6","BxD","D2","DxB"),2))
+for(myline in seq(0.5,2,0.5)){
+  axis(1, at=12.5, line=myline, labels=c(""))
+}
+axis(1, at=c(6.5,18.5), line=1, tick=FALSE, labels=c("cortex", "liver"))
+legend("bottomleft", title="Reference", legend=c("B6mm10","D2"), fill=c("black","tan"))
+
+
+
+```
+
+Observations:
+
+* No difference observable between 0 and 1 mismatch allowed.
+* About 15% of difference between cortex and liver (liver lower) but variability pretty similar.
+* There seem to have more variability on B6 mm10 reference than on D2.
+
+```{r}
+# comparison number of mismatch allowed
+# Absolute values (B6 mm10 reference)
+par(mfrow=c(2,5))
+for(mysample in rownames(B6mm10)){
+  plot(1:ncol(B6mm10),B6mm10[mysample,], las=1, bty="l", pch=19, ylim=c(0,65), xaxt="n", xlab="# mismatch allowed", main=mysample)
+  axis(1, at=1:ncol(B6mm10), labels=(1:ncol(B6mm10))-1)
+}
+
+# Absolute values (D2 reference)
+par(mfrow=c(2,5))
+for(mysample in rownames(D2)){
+  plot(1:ncol(D2),D2[mysample,], las=1, bty="l", pch=19, ylim=c(0,65), xaxt="n", xlab="# mismatch allowed", main=mysample)
+  axis(1, at=1:ncol(D2), labels=(1:ncol(D2))-1)
+}
+
+# Difference (B6 mm10 reference)
+par(mfrow=c(1,1))
+plot(B6mm10$Uniq0-B6mm10$Uniq1, pch=19, main="Difference (B6 mm10 reference)", xlab="Samples")
+
+# Difference (D2 reference)
+par(mfrow=c(1,1))
+plot(D2$Uniq0-D2$Uniq1, pch=19, main="Difference (D2 reference)", xlab="Samples")
+
+```
+

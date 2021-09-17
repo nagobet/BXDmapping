@@ -1,0 +1,301 @@
+---
+title: "Genotypes"
+author: "Nastassia Gobet"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    code_folding: hide
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    df_print: paged
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, fig.path="Graphs/Genotypes/", warning=TRUE)
+
+#load needed libraries
+library(knitr)
+library(vioplot)
+
+# set working directory
+##setwd("F:/BXD/analysis/Mapping")
+```
+
+# Goal
+
+Visualise genotypes in BXD lines.
+
+GN = GeneNetwork (https://www.genenetwork.org/).
+
+# Visualisation
+
+## Genotypes from GeneNetwork mm10 {.tabset}
+
+For visualisation purposes, the tickness of variants is not scaled compared to the chromosome length.
+
+```{r}
+# retrieve genotypes mm10 from GeneNetwork
+genoGN <- read.table("F:/BXD/data/genome/BXDGenotypes.vcf", header=TRUE, comment.char="", skip=1, stringsAsFactors=FALSE)
+colnames(genoGN)[1] <- "CHROM"
+colnames(genoGN) <- gsub("BXD0", "BXD", colnames(genoGN))
+genoGN$CHROM <- gsub(pattern="chr", replacement="", genoGN$CHROM)
+genoGN$CHROM <- as.numeric(gsub(pattern="X", replacement="20", genoGN$CHROM))
+chromosome_labels <- c(1:19, "X")
+```
+
+```{r}
+# create a function that plots genotypes for a BXD line
+plotGenotypesGNmm10 <- function(BXDline){
+  # get chromosome total length
+  length <- read.table(paste0("F:/BXD/data/PersonalizedReferences/", BXDline, "_nonrandomized_genotypesandimputed/star_paternal_withoutannotation/chrNameLength.txt"), header=FALSE, stringsAsFactors=FALSE)
+  colnames(length) <- c("chrom", "length")
+  orderedlengths <- length$length[match(paste0(chromosome_labels, "_paternal"), length$chrom)]
+  
+  # transform genotypes into color name
+  genoColors <- genoGN[, BXDline]
+  genoColors <- gsub("0/0", "black", genoColors)
+  genoColors <- gsub("0/1", "grey60", genoColors)
+  genoColors <- gsub("1/1", "tan", genoColors)
+  
+  # plot
+  plot(genoGN$CHROM, genoGN$POS, pch="", main=paste(BXDline, "mm10"), xaxt="n", xlab="Chromosome", ylab="genomic positions", bty="l", ylim=c(0, max(orderedlengths)))
+  axis(side=1, at=1:20, labels=chromosome_labels)
+  # chromosome limits
+  rect(sort(unique(genoGN$CHROM))-0.2, 0, sort(unique(genoGN$CHROM))+0.2, orderedlengths, col=NA, border="darkred")
+  # genotypes
+  rect(genoGN$CHROM-0.2, genoGN$POS, genoGN$CHROM+0.2, genoGN$POS, col=genoColors, border=genoColors)
+}
+```
+
+```{r GenotypesGNmm10, fig.width=8, results='asis'}
+# get list of BXD lines
+BXDlines <- gsub(pattern="_D2blocks.bed", replacement="", list.files(path="F:/BXD/data/genome", pattern="D2blocks"))
+# order names
+BXDlines_ordered <- BXDlines[sort(as.numeric(gsub(pattern="BXD", replacement="", BXDlines)), index.return=TRUE)$ix]
+
+# plot for each BXD line
+for(l in BXDlines_ordered){
+  # generate the header
+  cat(paste0("\n\n### ", l, "\n"))
+  plotGenotypesGNmm10(l)
+}
+```
+
+## Genotypes from GeneNetwork mm9 {.tabset}
+
+```{r}
+# retrieve genotypes mm9 from GeneNetwork
+genoGNmm9 <- read.table("F:/BXD/data/genome/BXD_Geno_2001-2016.geno.txt", header=TRUE, comment.char="", skip=14, stringsAsFactors=FALSE)
+genoGNmm9$Chr <- as.numeric(gsub(pattern="X", replacement="20", genoGNmm9$Chr))
+chromosome_labels <- c(1:19, "X")
+genoGNmm9$POS <- genoGNmm9$Mb*10^6
+colnames(genoGNmm9) <- gsub(pattern="BXD48a", replacement="BXD96", colnames(genoGNmm9))
+colnames(genoGNmm9) <- gsub(pattern="BXD65a", replacement="BXD97", colnames(genoGNmm9))
+colnames(genoGNmm9) <- gsub(pattern="BXD73b", replacement="BXD103", colnames(genoGNmm9))
+
+# get chromosome total length
+length <- read.table(paste0("F:/BXD/references/genome/star2.7.0e_B6mm9_withannotation/chrNameLength.txt"), header=FALSE, stringsAsFactors=FALSE)
+colnames(length) <- c("chrom", "length")
+length <- length[grep("NT_|Y|MT", length$chrom, invert=TRUE), ]
+orderedlengths <- length$length[match(chromosome_labels, length$chrom)]
+```
+
+BXD line equivalence (old and new names):
+
+* BXD48a = BXD96
+* BXD65a = BXD97
+* BXD73b = BXD103
+
+```{r}
+# create function to plot genotypes mm9 from GeneNetwork for a BXD line
+plotGenotypesGNmm9 <- function(BXDline){
+  # transform genotypes into color name
+  genoColors <- genoGNmm9[, BXDline]
+  genoColors <- gsub("B", "black", genoColors)
+  genoColors <- gsub("H", "grey60", genoColors)
+  genoColors <- gsub("D", "tan", genoColors)
+  genoColors <- gsub("U", "brown1", genoColors)
+  
+  # plot
+  plot(genoGNmm9$Chr, genoGNmm9$POS, pch="", main=paste(BXDline, "(mm9)"), xaxt="n", xlab="Chromosome", ylab="genomic positions", bty="l", ylim=c(0, max(orderedlengths)))
+  axis(side=1, at=1:20, labels=chromosome_labels)
+  # chromosome limits
+  rect(1:20-0.2, 0, 1:20+0.2, orderedlengths, col=NA, border="black")
+  # genotypes
+  rect(genoGNmm9$Chr-0.2, genoGNmm9$POS, genoGNmm9$Chr+0.2, genoGNmm9$POS, col=genoColors, border=genoColors)
+  # legend
+  legend("top", legend=c("B", "D", "H", "U"), fill=c("black", "tan", "grey60", "brown1"))
+}
+```
+
+```{r GenotypesGNmm9, fig.width=8, results='asis'}
+# plot for each BXD line
+for(l in BXDlines_ordered){
+  # generate the header
+  cat(paste0("\n\n### ", l, "\n"))
+  plotGenotypesGNmm9(l)
+}
+```
+
+Legend:
+
+* B = B6, maternal
+* D = D2, paternal
+* H = heterozygous
+* U = unknown
+
+
+* BXD100 have more balance between B and D alleles than in mm10 genotypes.
+
+## Genotypes from mm9 merged with variant calling {.tabset}
+
+For visualisation purposes, the tickness of variants is not scaled compared to the chromosome length.
+
+```{r eval=FALSE, include=FALSE}
+# retrieve genotypes mm9 from GeneNetwork merged with variant calling
+genoGNmm9merged <- read.table("F:/BXD/data/genome/BXD.PFLiver.PFBrain.BTBrain.Hypo.VariantFiltration.annotated.PASS.vcf", header=TRUE, comment.char="", skip=255, stringsAsFactors=FALSE)
+colnames(genoGNmm9merged)[1] <- "CHROM"
+genoGNmm9merged$CHROM <- gsub(pattern="X", replacement="20", genoGNmm9merged$CHROM)
+genoGNmm9merged$CHROM <- gsub(pattern="Y", replacement="21", genoGNmm9merged$CHROM)
+genoGNmm9merged$CHROM <- gsub(pattern="MT", replacement="22", genoGNmm9merged$CHROM)
+# remove genotypes unplaced
+genoGNmm9merged <- genoGNmm9merged[-grep("NT_", genoGNmm9merged$CHROM), ]
+genoGNmm9merged$CHROM <- as.numeric(genoGNmm9merged$CHROM)
+chromosome_labels <- c(1:19, "X", "Y", "MT")
+# retrieve chromosomes length
+chromosome_lengths <- read.table("F:/BXD/data/genome/BXD.PFLiver.PFBrain.BTBrain.Hypo.VariantFiltration.annotated.PASS.vcf", header=FALSE, comment.char="", skip=43, nrows=211, stringsAsFactors=FALSE, sep="")
+chromosome_lengths$V1 <- gsub(pattern="##contig=<ID=", replacement="", chromosome_lengths$V1)
+chromosome_lengths$V1 <- gsub(pattern="length=", replacement="", chromosome_lengths$V1)
+chromosome_lengths$V1 <- gsub(pattern=">", replacement="", chromosome_lengths$V1)
+chromosome_lengths <- read.table(text=chromosome_lengths$V1, sep=",")
+chromosome_lengths <- chromosome_lengths[grep("NT_", chromosome_lengths$V1, invert=TRUE),]
+chromosome_lengths <- chromosome_lengths[match(chromosome_lengths$V1, chromosome_labels),"V2"]
+```
+
+```{r eval=FALSE, include=FALSE}
+# create a function that plots genotypes for a BXD line
+plotGenotypesGNmm9merged <- function(BXDline){
+
+  # extract genotypes
+  geno <- genoGNmm9merged[genoGNmm9merged$CHROM %in% chromosome_labels, c("CHROM", "POS", BXDline)]
+  genoColors <- substr(unlist(geno[, BXDline]), 1, 3)
+  # remove rare and unknown genotypes
+  geno <- geno[grep("2|3|4|5|6|7|8|9|\\.", genoColors, invert=TRUE),]
+  genoColors <- substr(unlist(geno[, BXDline]), 1, 3)
+  # transform genotypes into color name
+  genoColors <- gsub("0/0", "black", genoColors)
+  genoColors <- gsub("0/1", "grey60", genoColors)
+  genoColors <- gsub("1/1", "tan", genoColors)
+  
+  # plot
+  plot(1:22, 1:22, pch="", main=BXDline, xaxt="n", xlab="Chromosome", ylab="genomic positions", bty="l", ylim=c(0, max(chromosome_lengths)))
+  axis(side=1, at=1:22, labels=chromosome_labels)
+  # chromosome limits
+  rect(1:22-0.2, 0, 1:22+0.2, chromosome_lengths, col=NA, border="darkred")
+  # genotypes
+  rect(geno$CHROM-0.2, geno$POS, geno$CHROM+0.2, geno$POS, col=genoColors, border=genoColors)
+}
+```
+
+```{r GenotypesGNmm9merged, eval=FALSE, fig.width=8, include=FALSE, results='asis'}
+# get list of BXD lines
+MouseLines <- colnames(genoGNmm9merged)[-c(1:9)]
+parentalF1 <- grep("BXD", MouseLines, value=TRUE, invert=TRUE)
+BXDlines <- grep("BXD", MouseLines, value=TRUE)
+# order names
+BXDlines_ordered <- BXDlines[sort(as.numeric(gsub(pattern="BXD|t", replacement="", BXDlines)), index.return=TRUE)$ix]
+
+
+# plot for each BXD line
+for(l in BXDlines_ordered){
+  # generate the header
+  cat(paste0("\n\n### ", l, "\n"))
+  plotGenotypesGNmm9merged(l)
+}
+```
+
+```{r eval=FALSE, include=FALSE}
+# plot for parental and F1 lines
+for(l in parentalF1){
+  # generate the header
+  cat(paste0("\n\n### ", l, "\n"))
+  plotGenotypesGNmm9merged(l)
+}
+```
+
+
+## Imputed genotypes {.tabset}
+
+Too large files to be easily dealed with on R.
+
+## D2-variants from database {.tabset}
+
+Too large files to be easily dealed with on R.
+
+```{r eval=FALSE, include=FALSE}
+# retrieve variants from dbSNP (version 142)
+D2dbSNPsnps <- read.table("F:/BXD/data/genome/D2specificVariants/DBA_2J.mgp.v5.snps.dbSNP142.vcf", header=TRUE, comment.char="", skip=68, stringsAsFactors=FALSE)
+D2dbSNPindels <- read.table("F:/BXD/data/genome/D2specificVariants/DBA_2J.mgp.v5.indels.dbSNP142.normed.vcf", header=TRUE, comment.char="", skip=69, stringsAsFactors=FALSE)
+colnames(D2dbSNPsnps)[1] <- "CHROM"
+colnames(D2dbSNPindels)[1] <- "CHROM"
+D2dbSNPindels$CHROM <- gsub(pattern="X", replacement="20", D2dbSNPindels$CHROM)
+D2dbSNPindels$CHROM <- as.numeric(gsub(pattern="Y", replacement="21", D2dbSNPindels$CHROM))
+D2dbSNPsnps$CHROM <- gsub(pattern="X", replacement="20", D2dbSNPsnps$CHROM)
+D2dbSNPsnps$CHROM <- as.numeric(gsub(pattern="Y", replacement="21", D2dbSNPsnps$CHROM))
+chromosome_labels <- c(1:19, "X", "Y")
+```
+
+All variants (SNVs and indels) are visualised at one nucleotide position (POS column from vcf file). The tickness of variant is not at scale.
+
+```{r D2variants, eval=FALSE, fig.width=8, include=FALSE}
+# get chromosome total length
+length <- read.table(paste0("F:/BXD/data/PersonalizedReferences/DBA_2J_nonrandomized_indelsSNVs/star_paternal_withoutannotation/chrNameLength.txt"), header=FALSE, stringsAsFactors=FALSE)
+
+colnames(length) <- c("chrom", "length")
+orderedlengths <- length$length[match(paste0(chromosome_labels, "_paternal"), length$chrom)]
+  
+# transform genotypes into color name
+genoColors <- grep("/", unlist(strsplit(D2dbSNPsnps[, "DBA_2J"], split=":")), value=TRUE)
+genoColors <- gsub("1/2", "darkturquoise", genoColors)
+genoColors <- gsub("0/1", "grey60", genoColors)
+genoColors <- gsub("1/1", "tan", genoColors)
+  
+# plot
+plot(D2dbSNPsnps$CHROM, D2dbSNPsnps$POS, pch="", main="D2 variants from dbSNP", xaxt="n", xlab="Chromosome", ylab="genomic positions", bty="l", ylim=c(0, max(orderedlengths)))
+axis(side=1, at=1:21, labels=chromosome_labels)
+# chromosome limits
+rect(sort(unique(D2dbSNPsnps$CHROM))-0.2, 0, sort(unique(D2dbSNPsnps$CHROM))+0.2, orderedlengths, col=NA, border="darkred")
+# snps
+rect(D2dbSNPsnps$CHROM-0.2, D2dbSNPsnps$POS, D2dbSNPsnps$CHROM+0.2, D2dbSNPsnps$POS, col=genoColors, border=genoColors)
+
+# transform genotypes into color name
+genoColors <- grep("/", unlist(strsplit(D2dbSNPindels[, "DBA_2J"], split=":")), value=TRUE)
+genoColors <- gsub("1/2", "darkturquoise", genoColors)
+genoColors <- gsub("0/1", "grey60", genoColors)
+genoColors <- gsub("1/1", "tan", genoColors)
+
+# indels
+rect(D2dbSNPindels$CHROM-0.2, D2dbSNPsnps$POS, D2dbSNPindels$CHROM+0.2, D2dbSNPindels$POS, col=genoColors, border=genoColors)
+```
+
+
+# Observations
+
+* BXD100 has many chromosomes with no D2 alleles.
+* `r round(length(grep("0/1", unlist(genoGN[, 10:ncol(genoGN)])))/length(unlist(genoGN[, 10:ncol(genoGN)]))*100, 1)`% of heterozygous alleles (`r length(grep("0/1", unlist(genoGN[, 10:ncol(genoGN)])))` over `r length(unlist(genoGN[, 10:ncol(genoGN)]))`).
+
+
+# Session information
+
+```{r}
+sessionInfo()
+```

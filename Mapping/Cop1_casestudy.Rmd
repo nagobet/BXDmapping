@@ -1,0 +1,238 @@
+---
+title: "Cop1 case study"
+author: "Nastassia Gobet"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    code_folding: hide
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    df_print: paged
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, fig.path="Graphs/Cop1_casestudy/", warning=TRUE)
+
+#load needed libraries
+library(knitr)
+library(vioplot)
+
+# set working directory
+##setwd("F:/BXD/analysis/Mapping")
+```
+
+# Goal
+
+Explore a gene expression and gene counts for a gene which differ for GRCm38 and BXD-specific references.
+
+# Information
+
+Doing this in default STAR setting (genotypesandimputed_withannotation_Local_0_10) because also available with B6 mm10 reference (abbreviated B6)
+
+FastQTL output (http://fastqtl.sourceforge.net/):
+
+* rowname = ID molecular phenotype (gene)
+* V2 = number of variant tested
+* V3 = MLE of shape 1 parameter of beta distribution
+* V4 = MLE of shape 2 parameters of beta distribution
+* V5 = to be described (not explained on FastQTL website)
+* V6 = ID of best variant
+* V7 = distance between variant and molecular phenotype
+* V8 = p-value of association between variant and molecular phenotype
+* V9 = slope of regression
+* V10 = first permutation p-value accounting for multiple variants tested by molecular phenotype
+* V11 = second permutation p-value obtained with beta approximation (recommended to use this one)
+
+# Preparation
+
+## Functions definitions
+
+```{r FunctionsDefinitions}
+prepareRawCounts <- function(counts, ref){
+  
+  # convert gene ids to gene names
+  idx_uniq <- which(!duplicated(GeneConvert$V2[match(rownames(counts), GeneConvert$V1)]))
+  counts <- counts[idx_uniq,]
+  rownames(counts) <- GeneConvert$V2[match(rownames(counts), GeneConvert$V1)]
+  
+  # change X into C for cortex
+  colnames(counts) <- gsub("X", "C", colnames(counts))
+  # split by tissue and condition
+  CortexNSD <- subset(counts, select=grep("^C[0-9]*nsd$", colnames(counts), value=TRUE))
+  CortexSD <- subset(counts, select=grep("^C[0-9]*sd$", colnames(counts), value=TRUE))
+  LiverNSD <- subset(counts, select=grep("^L[0-9]*nsd$", colnames(counts), value=TRUE))
+  LiverSD <- subset(counts, select=grep("^L[0-9]*sd$", colnames(counts), value=TRUE))
+  # clean and formate names of mouse lines
+  colnames(CortexNSD) <- LinesNames$V5[match(gsub("[LCnsd]", "", colnames(CortexNSD)), LinesNames$V10)]
+  colnames(CortexSD) <- LinesNames$V5[match(gsub("[LCnsd]", "", colnames(CortexSD)), LinesNames$V10)]
+  colnames(LiverNSD) <- LinesNames$V5[match(gsub("[LCnsd]", "", colnames(LiverNSD)), LinesNames$V10)]
+  colnames(LiverSD) <- LinesNames$V5[match(gsub("[LCnsd]", "", colnames(LiverSD)), LinesNames$V10)]
+  
+  # output 4 datasets
+  assign(paste0("counts", ref, "ref_CortexNSD"), CortexNSD, envir=parent.frame())
+  assign(paste0("counts", ref, "ref_CortexSD"), CortexSD, envir=parent.frame())
+  assign(paste0("counts", ref, "ref_LiverNSD"), LiverNSD, envir=parent.frame())
+  assign(paste0("counts", ref, "ref_LiverSD"), LiverSD, envir=parent.frame())
+}
+
+# plot gene expression for a pair gene-variant
+plotGeneExpressionVariant <- function(ref, gene, variant, tissue, condition){
+  # get first letter of tissue
+   t <- unlist(strsplit(tissue, split=""))[1]
+  # get gene expression dataset
+  expr <- eval(parse(text=paste0("expr", ref, "ref", t, condition)))
+  # plot
+  plot(as.numeric(expr[gene, sort(names(expr))]), pch=19, col=as.factor(genotypesGN[genotypesGN$Locus==variant, sort(names(expr))]), main=paste0("Gene: ", gene,", ref: ", ref, ", variant: ", variant, ", tissue: ", tissue, ", condition: ", condition), xaxt="n", xlab="", ylab="gene expression", las=1)
+  axis(1, 1:length(names(expr)), sort(names(expr)), las=2)
+}
+# vectorize function
+plotGeneExpressionVariant <- Vectorize(plotGeneExpressionVariant, SIMPLIFY=FALSE)
+
+# plot raw gene counts for a pair gene-variant
+plotGeneCountsVariant <- function(ref, gene, variant, tissue, condition){
+  # get gene expression dataset
+  counts <- eval(parse(text=paste0("counts", ref, "ref_", tissue, condition)))
+  # plot
+  plot(as.numeric(counts[gene, sort(names(counts))]), pch=19, col=as.factor(genotypesGN[genotypesGN$Locus==variant, sort(names(counts))]), main=paste0("Gene: ", gene,", ref: ", ref, ", variant: ", variant, ", tissue: ", tissue, ", condition: ", condition), xaxt="n", xlab="", ylab="raw gene counts", las=1)
+  axis(1, 1:length(names(counts)), sort(names(counts)), las=2)
+}
+# vectorize function
+plotGeneCountsVariant <- Vectorize(plotGeneCountsVariant, SIMPLIFY=FALSE)
+```
+
+## Data preparation
+
+```{r DataPreparation}
+# load table to convert mouse line names
+LinesNames <- read.table("F:/BXD/data/ConvertLineNames.tsv", header=FALSE, stringsAsFactors=FALSE, sep="\t")
+
+# load table to convert between gene id and gene name
+GeneConvert <- read.table("F:/BXD/references/gene_names_B6mm10.tab", header=FALSE, stringsAsFactors=FALSE, sep="\t")
+
+# retrieve GeneNetwork (GN) genotypes
+genotypesGN <- read.table("F:/BXD/data/genome/BXDGenotypes.geno", header=TRUE)
+
+# retrieve raw gene counts, formate and subset
+countsB6ref <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/B6mm10primaryassembly_withannotation/Summary_ReadsPerGene.out.tab", header=TRUE, row.names=1)
+prepareRawCounts(countsB6ref, "B6")
+countsBXDref <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/BXDfromGNandimputedD2blocks_withannotation/Summary_ReadsPerGene.out.tab", header=TRUE, row.names=1)
+prepareRawCounts(countsBXDref, "BXD")
+
+# retrieve gene expression
+exprB6refCNSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Cortex_NSD.tab")
+exprBXDrefCNSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_Cortex_NSD.tab")
+exprB6refCSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Cortex_SD.tab")
+exprBXDrefCSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_Cortex_SD.tab")
+exprB6refLNSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Liver_NSD.tab")
+exprBXDrefLNSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_Liver_NSD.tab")
+exprB6refLSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Liver_SD.tab")
+exprBXDrefLSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_Liver_SD.tab")
+
+# eQTLs mapped on GRCm38
+eQTLB6refCNSD <- read.table("F:/BXD/data/transcriptome/eQTL_B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Cortex_NSD_grouped.tab", stringsAsFactors=FALSE)
+eQTLB6refCSD <- read.table("F:/BXD/data/transcriptome/eQTL_B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Cortex_SD_grouped.tab", stringsAsFactors=FALSE)
+eQTLB6refLNSD <- read.table("F:/BXD/data/transcriptome/eQTL_B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Liver_NSD_grouped.tab", stringsAsFactors=FALSE)
+eQTLB6refLSD <- read.table("F:/BXD/data/transcriptome/eQTL_B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Liver_SD_grouped.tab", stringsAsFactors=FALSE)
+# eQTLs mapped on BXD-specific references
+eQTLBXDrefCNSD <- read.table("F:/BXD/data/transcriptome/eQTL_BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_Cortex_NSD_grouped.tab", stringsAsFactors=FALSE)
+eQTLBXDrefCSD <- read.table("F:/BXD/data/transcriptome/eQTL_BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_Cortex_SD_grouped.tab", stringsAsFactors=FALSE)
+eQTLBXDrefLNSD <- read.table("F:/BXD/data/transcriptome/eQTL_BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_Liver_NSD_grouped.tab", stringsAsFactors=FALSE)
+eQTLBXDrefLSD <- read.table("F:/BXD/data/transcriptome/eQTL_BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_Liver_SD_grouped.tab", stringsAsFactors=FALSE)
+```
+
+# Gene selection
+
+```{r selectGene}
+# get common genes between eQTL list GRCm38 reference and BXD-specific references
+commongenes <- intersect(rownames(eQTLB6refCNSD)[!is.na(eQTLB6refCNSD[, "slope"])], rownames(eQTLBXDrefCNSD)[!is.na(eQTLBXDrefCNSD[, "slope"])])
+
+# eQTLs with different sign of slope
+changeofsign <- commongenes[sign(eQTLB6refCNSD[commongenes, "slope"])!=sign(eQTLBXDrefCNSD[commongenes, "slope"])]
+# eQTLs with different genetic marker
+changeofmarker <- commongenes[eQTLB6refCNSD[commongenes, "marker"]!=eQTLBXDrefCNSD[commongenes, "marker"]]
+
+# eQTLs significant with GRCm38 reference
+sig_eQTLB6 <- commongenes[which(eQTLB6refCNSD[commongenes, "adjustedpvalue"]<0.05)]
+# eQTLs significant with BXD-specific references
+sig_eQTLBXD <- commongenes[which(eQTLBXDrefCNSD[commongenes, "adjustedpvalue"]<0.05)]
+
+
+# select interesting genes (change of marker AND change of sign AND is significant with both GRCm38 and BXD-specific references)
+genes <- intersect(intersect(intersect(changeofmarker, changeofsign), sig_eQTLBXD), sig_eQTLB6)
+
+# take only the first one
+gene <- genes[1]
+
+# select markers id
+B6marker <- eQTLB6refCNSD[gene, "marker"]
+BXDmarker <- eQTLBXDrefCNSD[gene, "marker"]
+```
+
+The gene selected is _Cop1_. The eQTL change of marker and sign of slope between GRCm38 and BXD-specific references, and it is significant (q-value < 0.05) for both. It is the first one of a list of `r length(genes)` genes.
+
+* The marker for eQTL with B6 reference is `r B6marker`.
+* The marker for eQTL with BXD-sepcific references is `r BXDmarker`.
+
+This analysis was done in the Cortex NSD.
+
+# Cop1 eQTL details other tissue and condition
+
+```{r, Cop1eQTLs}
+eQTLB6refCNSD[gene, ]
+eQTLBXDrefCNSD[gene, ]
+
+eQTLB6refCSD[gene, ]
+eQTLBXDrefCSD[gene, ]
+
+eQTLB6refLNSD[gene, ]
+eQTLBXDrefLNSD[gene, ]
+
+eQTLB6refLSD[gene, ]
+eQTLBXDrefLSD[gene, ]
+```
+
+# Plotting
+
+Legend:
+
+* black = B6 allele
+* tan = D2 allele
+* red = heterozygous
+
+```{r}
+# define color palette
+palette(c("black", "tan", "red"))
+```
+
+## Cop1 gene expression Cortex NSD
+
+```{r geneExpression_CortexNSD, fig.width=10}
+par(mfrow=c(2,2))
+
+# plot variant-gene expression pair
+invisible(plotGeneExpressionVariant(ref=c("B6", "B6", "BXD", "BXD"), gene=gene, variant=c(B6marker, BXDmarker), tissue="Cortex", condition="NSD"))
+```
+
+## Cop1 gene counts Cortex NSD
+
+```{r geneCounts_CortexNSD, fig.width=10}
+par(mfrow=c(2,2))
+  
+# plot variant-gene count pair
+invisible(plotGeneCountsVariant(ref=c("B6", "B6", "BXD", "BXD"), gene=gene, variant=c(B6marker, BXDmarker), tissue="Cortex", condition="NSD"))
+```
+
+# Session information
+
+```{r}
+sessionInfo()
+```

@@ -1,0 +1,292 @@
+---
+title: "Figures Supplementary Mapping Paper"
+author: "Nastassia Gobet"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    code_folding: hide
+    df_print: paged
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE, fig.path="A:/CIG/USERS/ngobet/Communication/Figures/Mapping_paper/", warning=TRUE)
+
+#load needed libraries
+library(knitr)
+library(VennDiagram)
+library(gridBase)
+library(magick)
+library(plotrix)
+
+# set working directory
+##setwd("F:/BXD/analysis/Mapping")
+```
+
+# Goal
+
+The goal is to use Rmarkdown to produce the supplementary figures for the mapping paper.
+
+
+# Supplementary figures
+
+## Figure S1: Consequences of mapping reference transcriptome at read mapping level.
+
+```{r prepare_FigureS1}
+# load mapping stats on transcriptome for Kallisto
+# load B6mm10 stats
+n_processed_B6mm10 <- read.table("F:/BXD/data/transcriptome/2.5_quantification_Kallisto/B6mm10/n_processed.tab", header=FALSE, stringsAsFactors=FALSE)
+n_unique_B6mm10 <- read.table("F:/BXD/data/transcriptome/2.5_quantification_Kallisto/B6mm10/n_unique.tab", header=FALSE, stringsAsFactors=FALSE)
+# load D2 stats
+n_processed_D2 <- read.table("F:/BXD/data/transcriptome/2.5_quantification_Kallisto/D2/n_processed.tab", header=FALSE, stringsAsFactors=FALSE)
+n_unique_D2 <- read.table("F:/BXD/data/transcriptome/2.5_quantification_Kallisto/D2/n_unique.tab", header=FALSE, stringsAsFactors=FALSE)
+
+# load mapping statistics on transcriptome for STAR
+B6mm10allT <- read.table("F:/BXD/data/transcriptome/2_Mapping_STAR/OnTranscriptome/MappingStatisticsB6mm10.tsv", header=TRUE, stringsAsFactors=FALSE, row.names="Sample_Name")
+D2allT <- read.table("F:/BXD/data/transcriptome/2_Mapping_STAR/OnTranscriptome/MappingStatisticsD2.tsv", header=TRUE, stringsAsFactors=FALSE, row.names="Sample_Name")
+
+# Process data
+# calculate percentages for STAR tables
+for (c in 2:ncol(D2allT)){
+  D2allT[c] <- D2allT[c]/D2allT$Total*100
+}
+for (c in 2:ncol(B6mm10allT)){
+  B6mm10allT[c] <- B6mm10allT[c]/B6mm10allT$Total*100
+}
+
+# Load data mapped on genome
+B6mm10allG <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenome/MappingStatisticsB6mm10_primaryassembly.tsv", header=TRUE, stringsAsFactors=FALSE, row.names="Sample_Name")
+D2allG <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenome/MappingStatisticsD2.tsv", header=TRUE, stringsAsFactors=FALSE, row.names="Sample_Name")
+
+# get parental and F1
+parentalF1samples_idx <- rownames(D2allG)[grep("[DB]", rownames(D2allG))]
+```
+
+```{r FigureS1_ConsequencesMappingReferenceTranscriptomeReadMappingLevel, fig.width=10, fig.height=8}
+# plot for 2 parental assemblies mapping on transcriptome
+par(mfrow=c(2,2), bty="l", col.lab="grey30", col.axis="grey30", col.main="grey30", fg="grey30")
+
+# A
+plot(B6mm10allT[,"UniqDefault"], pch=19, col="black", ylim=c(0,100), las=2, xaxt="n", xlab="", ylab="Uniquely mapped percentage", main="Mapping on transcriptome with STAR")
+# add D2 values
+points(D2allT[,"UniqDefault"], pch=19, col="tan")
+for(myline in seq(0,2,0.5)){
+        axis(1, at=88, line=myline, labels=c(""))
+}
+axis(1, at=c(43,129), line=0, tick=FALSE, labels=c("cortex", "liver"))
+# legend for tissue
+##legend("topright", title="Tissue", legend=c("cortex","liver"), pch=c(19,17))
+# legend for reference
+legend("topright", title="Reference", legend=c("GRCm38","D2"), col=c("black","tan"), pch=19)
+
+# B
+plot(n_unique_B6mm10$V1/n_processed_B6mm10$V1*100, col="black", bg="black",
+     pch=19, ylim=c(0,100), las=1,
+     main="Mapping on transcriptome with Kallisto", xaxt="n", xlab="", ylab="Uniquely mapped percentage")
+points(n_unique_D2$V1/n_processed_D2$V1*100, pch=19, col="tan", bg="tan")
+for(myline in seq(0,2,0.5)){
+        axis(1, at=88, line=myline, labels=c(""))
+}
+axis(1, at=c(43,129), line=0, tick=FALSE, labels=c("cortex", "liver"))
+legend("topright", legend=c("GRCm38","D2"), col=c("black","tan"), pch=19, title="Reference")
+
+# panel C
+plot(B6mm10allT[parentalF1samples_idx,"Uniq0"], pch=19, col="black", ylim=c(0,100), las=2, xaxt="n", ylab="Uniquely mapped percentage", xlab="Samples", main="0 mismatch allowed on transcriptome")
+points(D2allT[parentalF1samples_idx,"Uniq0"], pch=19, col="tan")
+abline(v=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5))
+axis(1, at=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5), labels=rep(c(""),7))
+axis(1, at=c(c(2.5,5.5,8.5,11.5),12+c(2.5,5.5,8.5,11.5)), tick=FALSE, labels=rep(c("B6","BxD","D2","DxB"),2))
+for(myline in seq(0.5,2,0.5)){
+  axis(1, at=12.5, line=myline, labels=c(""))
+}
+axis(1, at=c(6.5,18.5), line=1, tick=FALSE, labels=c("cortex", "liver"))
+legend("topright", title="Reference", legend=c("GRCm38","D2"), col=c("black","tan"), pch=19, bg="white")
+
+# panel D
+plot(B6mm10allT[parentalF1samples_idx,"Uniq10"], pch=19, col="black", ylim=c(0,100), las=2, xaxt="n", ylab="Uniquely mapped percentage", xlab="Samples", main="10 mismatches allowed on transcriptome")
+points(D2allT[parentalF1samples_idx,"Uniq10"], pch=19, col="tan")
+abline(v=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5))
+axis(1, at=c(4.5,6.5,10.5,12.5,16.5,18.5,22.5), labels=rep(c(""),7))
+axis(1, at=c(c(2.5,5.5,8.5,11.5),12+c(2.5,5.5,8.5,11.5)), tick=FALSE, labels=rep(c("B6","BxD","D2","DxB"),2))
+for(myline in seq(0.5,2,0.5)){
+  axis(1, at=12.5, line=myline, labels=c(""))
+}
+axis(1, at=c(6.5,18.5), line=1, tick=FALSE, labels=c("cortex", "liver"))
+legend("topright", title="Reference", legend=c("GRCm38","D2"), col=c("black","tan"), pch=19, bg="white")
+
+# add panel letters
+mtext(LETTERS[1:4], side=3, line=0, adj=c(0, 0.52, 0, 0.52), padj=c(2, 2, 18, 18), cex=2, outer=TRUE)
+```
+
+__Figure S1: Consequences of mapping reference transcriptome at read mapping level.__
+
+A)	Mappability of all samples on 2 parental assembly transcriptomes using STAR permissive mapping setting.
+B)	Pseudo-mappability of all samples on 2 parental assembly transcriptomes using Kallisto.
+C)	Mappability of parental and F1 samples on 2 parental assembly transcriptomes using STAR restrictive mapping setting.
+D)	Mappability of parental and F1 samples on 2 parental assembly transcriptomes using STAR restrictive mapping setting, but up to 10 mismatches.
+
+
+## Figure S2: Examples of artefacts of assemblies sequence and annotation.
+
+```{r FigureS2_AssembliesArtefactsIGV, out.width = '100%'}
+# get nova2 genomic region
+nova2 <- image_read("A:/CIG/USERS/ngobet/Communication/Figures/Mapping_paper/IGV_nova2.png")
+# get Gm15564 sequence 
+Gm15564 <- image_read("A:/CIG/USERS/ngobet/Communication/Figures/Mapping_paper/IGV_Gm15564_sequence.png")
+
+# add letters for panels
+figS2a <- image_annotate(nova2, "A", size=60, location="+0-10", color="black")
+##BXDpanel
+figS2b <- image_annotate(Gm15564, "B", size=60, location="+0+0", color="black")
+
+# display figure
+image_append(c(figS2a, figS2b), stack=TRUE)
+```
+
+__Figure S2: Examples of artefacts of assemblies sequence and annotation.__
+
+A) *Nova2* genomic region in Integrative Genomics Viewer (IGV), as an transcriptome annotation artefact. The coverage is very similar between B6 and D2 assemblies, but the annotation differs, which causes the reads to be counted differently.
+B) *Gm15564* genomic sequence in IGV, as a artefact due to difference in completeness of genome assembly. Many reads map to this region on B6 assembly, but not on D2. It appears that in this region of the D2 assembly there are three unknown nucleotides (with label "N"), which supports the interpretation that it is probably due a difference in assembly quality, and not to a genomic variant.
+
+## Figure S3: Genotype imputation workflow.
+
+```{r FigureS3_ConsequencesOfMappingReferenceBiasInGeneLevels, fig.height=5}
+imputation <- image_read_svg("A:/CIG/USERS/ngobet/Communication/Figures/Mapping_paper/analyticalworkflow_20200519.svg", height=250)
+# add letter label
+figS3A <- image_annotate(imputation, "", size=36, location="+0+0", color="black")
+
+# display figure
+image_append(figS3A, stack=TRUE)
+```
+
+__Figure S3: Genotype imputation workflow.__
+
+## Figure S4: Consequences of mapping reference at local eQTL level in SD condition.
+
+```{r prepare_FigureS4}
+# create function to retrieve stats on eQTLs
+retrieveeQTLstats <- function(path, tissue, condition){
+  data <- read.table(paste0(path, "TMMnormalized_log2CPM_", tissue, "_", condition, "_pvalcorrected.txt"), stringsAsFactors=FALSE)
+  # retrieve number of significant eQTLs
+  sig <- length(which(data$adjustedpvalue<0.05))
+  # retrieve total number of expressed genes
+  tot <- nrow(data)
+  
+  datafull <- read.table(paste0(path, "TMMnormalized_log2CPM_", tissue, "_", condition, ".txt"), stringsAsFactors=FALSE)
+  neg <- table(sign(datafull$V9[which(data$adjustedpvalue<0.05)]))[["-1"]]
+  pos <- table(sign(datafull$V9[which(data$adjustedpvalue<0.05)]))[["1"]]
+  
+  # calculate percentage of significant eQTLs (over number of expressed genes)
+  percentage_sig <- sig/tot*100
+  # calculate percentage of significant eQTLs with positive slope (over number of expressed genes)
+  percentage_pos <- pos/tot*100
+  # calculate percentage of difference between significant eQTLs with negative and positive slope (over number of expressed genes)
+  percentage_skewness <- (neg-pos)/tot*100
+  
+  return(c(sig=sig, total=tot, neg=neg, pos=pos, percentage_sig=percentage_sig, percentage_pos=percentage_pos, percentage_skewness=percentage_skewness))
+}
+
+# define paths to find data
+paths <- c(B6="F:/BXD/data/transcriptome/eQTL_B6mm10primaryassembly_withannotation/", BXD="F:/BXD/data/transcriptome/eQTL_BXDfromGNandimputedD2blocks_withannotation/")
+
+# load data
+CNSDcomparisonstats <- t(sapply(paths, FUN=retrieveeQTLstats, tissue="Cortex", condition="NSD"))
+CSDcomparisonstats <- t(sapply(paths, FUN=retrieveeQTLstats, tissue="Cortex", condition="SD"))
+LNSDcomparisonstats <- t(sapply(paths, FUN=retrieveeQTLstats, tissue="Liver", condition="NSD"))
+LSDcomparisonstats <- t(sapply(paths, FUN=retrieveeQTLstats, tissue="Liver", condition="SD"))
+
+# group data
+comparisonSig <- cbind(CNSDcomparisonstats[, "percentage_sig"], CSDcomparisonstats[, "percentage_sig"], LNSDcomparisonstats[, "percentage_sig"], LSDcomparisonstats[, "percentage_sig"])
+comparisonSkewness <- cbind(CNSDcomparisonstats[, "percentage_skewness"], CSDcomparisonstats[, "percentage_skewness"], LNSDcomparisonstats[, "percentage_skewness"], LSDcomparisonstats[, "percentage_skewness"])
+
+# function to check if difference is within 5% of average
+percentagediff <- function(x1, x2){
+  diff <- x1-x2
+  average <- apply(cbind(x1, x2), MARGIN=1, FUN=mean)
+
+  return(abs(diff/average))
+}
+
+# load, process, and plot local eQTL comparison
+plotVennSimilarat5percent <- function(tissue, condition){
+  # Loading data
+  eQTLB6 <- read.table(paste0("F:/BXD/data/transcriptome/eQTL_B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_", tissue, "_", condition, "_grouped.tab"), header=TRUE, row.names=1, stringsAsFactors=FALSE)
+  eQTLBXD <- read.table(paste0("F:/BXD/data/transcriptome/eQTL_BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_", tissue, "_", condition, "_grouped.tab"), header=TRUE, row.names=1, stringsAsFactors=FALSE)
+
+  # remove genes with marker NA
+  ce_mm10_noNA <- eQTLB6[which(!is.na(eQTLB6$marker)), ]
+  ce_BXD_noNA <- eQTLBXD[which(!is.na(eQTLBXD$marker)), ]
+
+  commongenes <- intersect(rownames(ce_mm10_noNA), rownames(ce_BXD_noNA))
+  samemarker <- commongenes[which(ce_BXD_noNA[commongenes, "marker"]==ce_mm10_noNA[commongenes, "marker"])]
+  similarslope <- commongenes[which(percentagediff(ce_BXD_noNA[commongenes, "slope"], ce_mm10_noNA[commongenes, "slope"])<0.05)]
+  similarqvalue <- commongenes[which(percentagediff(ce_BXD_noNA[commongenes, "adjustedpvalue"], ce_mm10_noNA[commongenes, "adjustedpvalue"])<0.05)]
+
+  venn.plot <- venn.diagram(
+    x=list(marker=samemarker, slope=similarslope, qvalue=similarqvalue),
+    filename=NULL,
+    main=paste0("local eQTL in ", tissue, " ", condition, " (similar at 5%)"),
+    fontfamily="sans",
+    main.fontfamily="sans",
+    cex=1,
+    cat.cex=1,
+    main.cex=1.5,
+    cat.fontfamily="sans",
+    print.mode=c("raw", "percent"),
+    fill=c("lightgreen", "cornflowerblue", "red"),
+    alpha=c(0.75, 0.5, 0.25)
+  );
+
+  ###grid.draw(venn.plot)
+}
+```
+
+```{r FigureS4_ConsequencesMappingReferenceAtLocaleQTLlevelSDcondition, fig.height=5, fig.width=10}
+par(mfrow=c(2,2), bty="l", col.lab="grey30", col.axis="grey30", col.main="grey30", fg="grey30")
+grid.newpage()
+
+# panel A
+figS4a <- plotVennSimilarat5percent(tissue="Cortex", condition="SD")
+
+# panel B
+figS4b <- plotVennSimilarat5percent(tissue="Liver", condition="SD")
+
+frame()
+vps <- baseViewports()
+pushViewport(vps$inner, vps$figure, vps$plot)
+try(grid.draw(), silent=TRUE)
+popViewport(0)
+pushViewport(viewport(layout=grid.layout(1, 2, widths=unit(c(0.5, 0.5), "npc"))))
+pushViewport(viewport(layout.pos.col=1, layout.pos.row=1))
+grid.draw(figS4a)
+popViewport(0)
+pushViewport(viewport(layout=grid.layout(1, 2, widths=unit(c(0.5, 0.5), "npc"))))
+pushViewport(viewport(layout.pos.col=2, layout.pos.row=1))
+grid.draw(figS4b)
+popViewport(0)
+
+# add panel labels
+mtext(LETTERS[1:2], side=3, line=-2, adj=c(0,0.52), padj=c(0,0), cex=2, outer=TRUE)
+```
+
+__Figure S4: Consequences of mapping reference at local eQTL level in SD condition.__
+
+A) Local eQTLs overlapping in cortex SD between GRCm38 and BXD-specific references.
+B) Local eQTLs overlapping in liver SD between GRCm38 and BXD-specific references.
+
+
+# R session info
+
+```{r sessionInfo}
+sessionInfo()
+```

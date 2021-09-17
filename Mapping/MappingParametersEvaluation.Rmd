@@ -1,0 +1,135 @@
+---
+title: "Mapping Parameters Evaluation"
+author: "Nastassia Gobet"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    keep_md: no
+    code_folding: hide
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    df_print: paged
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, fig.path="Graphs/MappingParametersEvaluation/", warning=TRUE)
+
+#load needed libraries
+library(knitr)
+library(vioplot)
+
+# set working directory
+##setwd("F:/BXD/analysis/Mapping")
+```
+
+# GOAL
+
+Determine the best mapping settings and compare BXD-specific references to B6 reference.
+
+# Analysis
+
+## Data preparation
+
+Extract number of significant eQTLs and total eQTLs.
+
+```{r RetrievingeQTLsStats, fig.height=8, fig.align="center"}
+basepath <- "F:/BXD/data/MappingEvaluation/"
+settinglist <- list.dirs(path=basepath, full.names=FALSE, recursive=FALSE)
+tissuelist <- c("Cortex", "Liver")
+conditionlist <- c("NSD", "SD")
+##normalizationtypelist <- c("log2CPM", "log2TPM")
+normalizationtypelist <- c("log2CPM")
+
+# function to retrieve number of eQTLs and number of expressed genes
+retrieveeQTLstats <- function(basepath, setting, normalizationtype, tissue, condition){
+  # load eQTL data
+  ##print(paste0(basepath, setting, "/TMMnormalized_", normalizationtype, "_", tissue, "_", condition, "_pvalcorrected.txt"))
+  data <- read.table(paste0(basepath, setting, "/TMMnormalized_", normalizationtype, "_", tissue, "_", condition, "_pvalcorrected.txt"), stringsAsFactors=FALSE)
+  # retrieve number of significant eQTLs
+  sig <- length(which(data$adjustedpvalue<0.05))
+  # retrieve total number of eQTLs
+  tot <- nrow(data)
+  
+  return(c(nb_sig=sig, total=tot, ratio=sig/tot))
+}
+
+##retrieveeQTLstats(basepath, setting, normalizationtype, tissue, condition)
+
+# determine best (= more significant eQTLs) mapping setting for each combination of tissue, condition, and type of normalization
+idx <- 1
+optimalsettings <- as.data.frame(matrix(NA, nrow=8, ncol=7))
+colnames(optimalsettings) <- c("Condition", "Tissue", "Type of Normalization", "# significant eQTLs", "# expressed genes", "Percentage of significant eQTLs", "Setting")
+for(tissue in tissuelist){
+  for(condition in conditionlist){
+    for(normalizationtype in normalizationtypelist){
+      optimalsettings[idx, "Tissue"] <- tissue
+      optimalsettings[idx, "Condition"] <- condition
+      optimalsettings[idx, "Type of Normalization"] <- normalizationtype
+      eQTLstats <- as.data.frame(t(sapply(settinglist, retrieveeQTLstats, basepath=basepath, normalizationtype=normalizationtype, tissue=tissue, condition=condition)))
+      sort_idx <- sort(eQTLstats$ratio, index.return=TRUE)$ix
+      dotchart(eQTLstats$ratio[sort_idx]*100, labels=gsub("genotypesandimputed_", "", rownames(eQTLstats)[sort_idx]), cex=0.8, main=paste(tissue, condition, normalizationtype), pch=19, col=c("darkmagenta","orchid"), xlab="Percentage of significant eQTLs")
+      gsub("genotypesandimputed_", "", rownames(eQTLstats))
+      gsub("genotypesandimputed_", "", rownames(eQTLstats))
+      bestsetting <- eQTLstats[which.max(eQTLstats$ratio),]
+      optimalsettings[idx, "Percentage of significant eQTLs"] <- bestsetting$ratio*100
+      optimalsettings[idx, "# significant eQTLs"] <- bestsetting$nb_sig
+      optimalsettings[idx, "# expressed genes"] <- bestsetting$total
+      optimalsettings[idx, "Setting"] <- rownames(bestsetting)
+      idx <- idx + 1
+    }
+  }
+}
+```
+
+### Mapping evaluation results
+
+```{r MappingEvaluation}
+# display results as table
+optimalsettings
+```
+
+### Merging results for conditions
+
+To have one unique classification of best mapping parameters per organ take the average between conditions (NSD and SD).
+
+```{r MergingMappingParametersResults, fig.height=7, fig.width=5}
+# retrieve all values for log2CPM data
+normalizationtype <- "log2CPM"
+for(tissue in tissuelist){
+  for(condition in conditionlist){
+      assign(paste("eQTLstats", tissue, condition, sep="_"), as.data.frame(t(sapply(settinglist, retrieveeQTLstats, basepath=basepath, normalizationtype=normalizationtype, tissue=tissue, condition=condition))))
+  }
+}
+
+averageratio_Cortex <- apply(cbind(eQTLstats_Cortex_NSD$ratio, eQTLstats_Cortex_SD$ratio), MARGIN=1, FUN=mean)
+order_Cortex <- sort(averageratio_Cortex, index.return=TRUE)$ix
+
+averageratio_Liver <- apply(cbind(eQTLstats_Liver_NSD$ratio, eQTLstats_Liver_SD$ratio), MARGIN=1, FUN=mean)
+order_Liver <- sort(averageratio_Liver, index.return=TRUE)$ix
+
+dotchart(averageratio_Cortex[order_Cortex]*100, labels=gsub("genotypesandimputed_", "", rownames(eQTLstats_Cortex_NSD)[order_Cortex]), cex=0.8, main=paste("Cortex", normalizationtype), pch=19, col=c("darkmagenta","orchid"), xlab="significant eQTLs (%)")
+
+dotchart(averageratio_Liver[order_Liver]*100, labels=gsub("genotypesandimputed_", "", rownames(eQTLstats_Liver_NSD)[order_Liver]), cex=0.8, main=paste("Liver", normalizationtype), pch=19, col=c("darkmagenta","orchid"), xlab="significant eQTLs (%)")
+```
+
+### Alternative measures
+
+Alternative measures as objective function to evaluate to try to avoid reference bias.
+
+An eQTL with a negative slope means that the B6 expression is higher than D2.
+
+
+# Session information
+
+```{r}
+sessionInfo()
+```

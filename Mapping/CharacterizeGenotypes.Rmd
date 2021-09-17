@@ -1,0 +1,95 @@
+---
+title: "Characterize Genotypes"
+author: "Nastassia Gobet"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    keep_md: no
+    code_folding: hide
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    df_print: paged
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, fig.path="Graphs/", warning=TRUE)
+
+#load needed libraries
+library(knitr)
+
+# set working directory
+##setwd("F:/BXD/analysis/Mapping")
+```
+
+# GOAL
+
+Characterize genomic variants
+
+# Raw data
+
+```{sh eval=FALSE, include=TRUE}
+# Counting variants
+
+# count genotypes (GeneNetwork)
+grep -v "^[#@C\"]" /mnt/nas/BXD/data/genome/BXD_Geno-19Jan2017_forGN.txt | wc -l
+
+# count SNVs
+grep -v "^#" /mnt/nas/BXD/data/genome/D2specificVariants/DBA_2J.mgp.v5.snps.dbSNP142.vcf | wc -l
+# count indels
+grep -v "^#" /mnt/nas/BXD/data/genome/D2specificVariants/DBA_2J.mgp.v5.indels.dbSNP142.normed.vcf | wc -l
+# count SVs
+grep -v "^#" /mnt/nas/BXD/data/genome/D2specificVariants/estd118_Keane_et_al_2011.2013-01-07.MGSCv37.gvf | wc -l
+```
+
+```{r loadData}
+# number of variants per category
+variants <- c(7324, 5872394, 1093496, 1689181)
+var_categories <- c("genotypes (GeneNetwork)", "SNVs", "indels", "SVs")
+
+# SNV distances
+DistanceStats <- read.table("../../data/genome/D2specificVariants/DistanceStatsSNV.tsv", stringsAsFactors=FALSE, header=TRUE, row.names=1)
+# SNV heterozygosity
+HeterozygosityStats <- read.table("../../data/genome/D2specificVariants/HeterozygosityStatsSNV.tsv", stringsAsFactors=FALSE, header=TRUE, row.names=1)
+```
+
+# Plotting
+
+## Incompleteness of genotypes
+
+```{r IncompletenessGenotypes, fig.width=10}
+par(mar=c(3.1, 5.1, 0.1, 0.1), mgp=c(4,1,0))
+barsPosition <- barplot(variants, names.arg=var_categories, las=1, ylim=c(0,6500000), col="grey20", ylab="Number of variants", cex.lab=1.4, cex.names=1.4)
+yoffset <- 3e5
+text(barsPosition, variants+yoffset, labels=format(variants), adj=0.5, xpd=TRUE, col="grey20", cex=1.2)
+```
+
+## Distance between SNVs
+
+```{r SNVdistance, fig.width=10}
+DistanceStats
+barplot(DistanceStats$CloseVariant/DistanceStats$NumberPairs*100, las=1, ylim=c(0,100), names.arg=rownames(DistanceStats), xlab="Chromosome", ylab="Close SNVs (%)", cex.names=1.1, cex.axis=1.2)
+```
+
+## Heterozygosity of SNVs
+
+```{r SNVHeterozygosity, fig.width=10}
+HeterozygosityStats
+barplot(HeterozygosityStats$HetClose/HeterozygosityStats$NumberVariants*100, las=1, ylim=c(0,100), names.arg=rownames(HeterozygosityStats), xlab="Chromosome", ylab="Close heterozygous SNVs (%)", cex.names=1.1, cex.axis=1.20)
+```
+
+`r round(sum(HeterozygosityStats$HetClose)/sum(HeterozygosityStats$NumberVariants)*100)`% of the SNVs are concerned (heterozygote SNV close to other heterozygote SNV). Closeness is defined by being below read length (100 bp).
+
+# Session information for this run
+
+```{r}
+sessionInfo()
+```

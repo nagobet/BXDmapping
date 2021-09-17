@@ -1,0 +1,235 @@
+---
+title: "Differential Expression (B6 mm10 STAR)"
+author: "Nastassia Gobet, Maxime Jan"
+date: '14 October 2019 - '
+output:
+  html_document:
+    code_folding: hide
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, warning=TRUE, fig.path = "Graphs/")
+
+# set working directory
+##setwd("F:/BXD/analyses/Mapping/DE/B6mm10STAR")
+```
+
+# GOAL
+
+Perform the differential gene expression in liver and cortex.
+
+
+# Packages
+
+```{r}
+# loading needed pacakges
+library(knitr)
+##if (!requireNamespace("BiocManager"))
+##  install.packages("BiocManager")
+##BiocManager::install()
+##BiocManager::install(c('edgeR', 'DESeq'))
+library(edgeR)
+library(limma)
+library(vioplot)
+```
+
+# DATA
+
+## gene expression table
+
+The input data are raw counts of gene expression (counted by ht-count). Rows are genes and columns are libraries/samples. (One library per sample, no replicate except for parental lines).
+
+```{r}
+# Import the raw counts table for liver
+countsLiver <- read.delim('F:/BXD/data/transcriptome/3_counting_htseq/B6mm10/count_B6mm10_liver.txt', header=TRUE, row.names=1, stringsAsFactors=TRUE, sep="\t")
+# Import the raw counts table for cortex
+countsCortex <- read.delim('F:/BXD/data/transcriptome/3_counting_htseq/B6mm10/count_B6mm10_cortex.txt', header=TRUE, row.names=1, stringsAsFactors=TRUE, sep="\t")
+
+# load B6 mm10 geneID to gene name convert table
+B6mm10geneConvert <- read.table("F:/BXD/references/gene_names_B6mm10.tab", header=FALSE, stringsAsFactors=FALSE, sep=" ")
+colnames(B6mm10geneConvert) <- c("GeneID", "GeneName")
+# remove B6 replicate gene names
+B6mm10geneConvert <- B6mm10geneConvert[-which(duplicated(B6mm10geneConvert$GeneName)),]
+rownames(B6mm10geneConvert) <- 1:nrow(B6mm10geneConvert)
+### could be improved by adding the counts from different transcripts
+
+# try to find B6 matching names
+idx <- na.omit(match(rownames(countsCortex),B6mm10geneConvert$GeneID))
+# take B6 subset
+countsCortex <- countsCortex[B6mm10geneConvert$GeneID[idx],]
+countsLiver <- countsLiver[B6mm10geneConvert$GeneID[idx],]
+# convert B6 rownames (GeneID) into gene name
+rownames(countsCortex) <- B6mm10geneConvert$GeneName[idx]
+rownames(countsLiver) <- B6mm10geneConvert$GeneName[idx]
+
+dim(countsCortex)
+dim(countsLiver)
+
+# convert GSM names into biologically meaning names
+# load table for conversion
+sratable <- read.table("F:/BXD/data/transcriptome/RNAseq/SraRunTable.txt", header=TRUE, stringsAsFactors=FALSE, sep="\t")
+idxC <- match(colnames(countsCortex),sratable$Sample_Name)
+idxL <- match(colnames(countsLiver),sratable$Sample_Name)
+
+colnames(countsCortex) <- paste(sratable$genotype[idxC], sratable$condition[idxC], sep="_")
+colnames(countsLiver) <- paste(sratable$genotype[idxL], sratable$condition[idxL], sep="_")
+```
+
+# Analysis
+
+## Filtering
+
+We want to filter the expression data to take only gene with average expression above 10. This is an arbitrary threshold to remove genes that are too noisy.
+
+```{r}
+# create a subset of the count table, filtering out rows (genes) with average counts <= 10
+countsLiver <- countsLiver[which(apply(countsLiver, MARGIN=1, FUN=mean)>10),]
+countsCortex <- countsCortex[which(apply(countsCortex, MARGIN=1, FUN=mean)>10),]
+
+dim(countsCortex)
+dim(countsLiver)
+```
+
+
+## Standarization
+
+The normalization is performed using the Weigthed trimmed mean of M-values (TMM) method of the edgeR package. This step standarizes the counts gene expression to take into account the variation in library size (=number of counts per library), the variation in length of the transcripts, and in RNA population variation. (Robinson, Genome Biology, 2010).
+
+
+```{r standarization}
+# formatting for edgeR (creates a DGEList object from the dataframe)
+dL <- DGEList(counts=countsLiver)
+dC <- DGEList(counts=countsCortex)
+
+# calculate the normalization factors for each sample
+dL <- calcNormFactors(dL, method="TMM")
+dC <- calcNormFactors(dC, method="TMM")
+### what sample is the reference for the normalisation factor?
+
+# check the distribution of the normalisation factors
+vioplot(dL$samples$norm.factors, col="white", horizontal=TRUE, names="")
+title(main="Distribution of normalisation factors for liver", xlab="Normalisation factors")
+vioplot(dC$samples$norm.factors, col="white", horizontal=TRUE, names="")
+title(main="Distribution of normalisation factors for cortex", xlab="Normalisation factors")
+
+# calculate CPM and normalize the counts 
+normalizedCPMcountsL <- data.frame(cpm(dL, normalized.lib.sizes=TRUE))
+normalizedCPMcountsC <- data.frame(cpm(dC, normalized.lib.sizes=TRUE))
+
+# Export normalized CPM
+write.table(normalizedCPMcountsL, file="edgeR_normalized_CPM_Liver.tab", row.names=TRUE, sep="\t", quote=FALSE)
+write.table(normalizedCPMcountsC, file="edgeR_normalized_CPM_Cortex.tab", row.names=TRUE, sep="\t", quote=FALSE)
+```
+
+
+## Differential gene expression
+
+Find which genes are up or down regulated by SD treatment (SD vs NSD).
+
+This is done here using functions from limma package:
+
+* model.matrix creates a model matrix (also called design matrix) which describes which samples are compared, in a voom-friendly format.
+* voom prepares the data to DE analysis by considering different variances for different samples/libraries (=observations) & genes. The step are: log2CPM transformation, estimate mean-variance relationship, estimate.
+* lmFit fits linear model (a line with slope and intercept) for each gene. It uses least squares fitting method (method="ls").
+* eBayes computes statistics by empirical Bayes moderation (moderated t-statistics, moderated F-statistic, B is the log-odds). The goal is to rank genes from the more to the less differentially expressed.
+* toptable extracts top ranked genes from a fit.
+
+```{r DE}
+# design
+##all(colnames(countsCortex)==colnames(countsLiver))
+variables <- matrix(unlist(strsplit(colnames(countsCortex),"_")), nrow=2)
+conds <- factor(variables[2,])
+strain <- factor(variables[1,])
+# create the design matrix by paired samples
+design <- model.matrix(~strain+conds)
+
+# by default the normalization method is quantile (voom calls normalizeBetweenArrays), here TMM factors computed before are used.
+# plot the mean-variance trend
+resLiver <- voom(dL, design, plot=TRUE)
+title(main="liver", line=0.5)
+resCortex <- voom(dC, design, plot=TRUE)
+title(main="cortex", line=0.5)
+
+# fitting
+# fit the linear models (one model per gene)
+fitL <- lmFit(resLiver, design)
+fitC <- lmFit(resCortex, design)
+# calculate the t-statistics using empirical Bayes moderation to determine if each gene is differentially expressed.
+fitL2 <- eBayes(fitL)
+fitC2 <- eBayes(fitC)
+
+# retrieve stats for each gene from the fitted models. The maximum number of genes is set higher than the number of genes tested so that all genes are taken. P-values are adjusted by FDR method, and sorted by log-odds (B)
+resultTableL <- topTable(fitL2, coef="condsSleep Deprived", adjust.method="fdr", sort.by="B", number=1000000)
+resultTableC <- topTable(fitC2, coef="condsSleep Deprived", adjust.method="fdr", sort.by="B", number=1000000)
+
+# store information about DE analysis
+write.table(resultTableL, file="RNA_SD_vs_NSD_DiffExp_Limma_Liver.txt", row.names=TRUE, sep="\t", quote=FALSE)
+write.table(resultTableC, file="RNA_SD_vs_NSD_DiffExp_Limma_Cortex.txt", row.names=TRUE, sep="\t", quote=FALSE)
+```
+
+# Plotting results
+
+Volcano plots
+
+```{r PlottingResults, fig.width=4}
+# load table with results of differential expression
+DEdata_Cortex <- read.table('RNA_SD_vs_NSD_DiffExp_Limma_Cortex.txt', sep="\t")
+DEdata_Liver <- read.table('RNA_SD_vs_NSD_DiffExp_Limma_Liver.txt', sep="\t")
+
+# volcano plot all transcripts in black and significant in red
+# set the colors
+palette(c("black", "brown3"))
+
+# plot for Cortex
+plot(1:nrow(DEdata_Cortex), DEdata_Cortex$logFC, las=1, pch=20, col=as.factor(DEdata_Cortex$adj.P.Val<=0.05),
+       main="DM in Cortex", xlab="rank of adjusted p-value", ylab="-logFC")
+
+# plot for Liver
+plot(1:nrow(DEdata_Liver), DEdata_Liver$logFC, las=1, pch=20, col=as.factor(DEdata_Liver$adj.P.Val<=0.05),
+       main="DM in Liver", xlab="rank of adjusted p-value", ylab="-logFC")
+```
+
+The logFC column represents ratio of SD over NSD (positive values are up-regulated by SD, negative values are down-regulated by SD).
+
+`r round(length(which(DEdata_Cortex$adj.P.Val<=0.05))/length(DEdata_Cortex$adj.P.Val)*100)`% of genes are significantly (below or equal to 0.05) differentially expressed in cortex, and `r round(length(which(DEdata_Liver$adj.P.Val<=0.05))/length(DEdata_Liver$adj.P.Val)*100)`% in liver.
+
+```{r}
+# get top 5 up- and top 5 down-regulated genes
+DEdata_Cortex <- DEdata_Cortex[order(DEdata_Cortex$logFC),]
+head(DEdata_Cortex,5)
+print(head(DEdata_Cortex[,c("logFC","adj.P.Val")],5))
+tail(DEdata_Cortex,5)
+print(tail(DEdata_Cortex[,c("logFC","adj.P.Val")],5))
+
+DEdata_Liver <- DEdata_Liver[order(DEdata_Liver$logFC),]
+head(DEdata_Liver,5)
+print(head(DEdata_Liver[,c("logFC","adj.P.Val")],5))
+tail(DEdata_Liver,5)
+print(tail(DEdata_Liver[,c("logFC","adj.P.Val")],5))
+
+# how many have a log fold change (absolute value) above 2?
+length(which(abs(DEdata_Cortex$logFC)>2))
+length(which(abs(DEdata_Liver$logFC)>2))
+```
+
+```{r}
+# testing
+plot(DEdata_Liver$adj.P.Val, pch=19)
+
+plot(DEdata_Liver$adj.P.Val,DEdata_Liver$logFC, pch=19)
+
+plot(log(DEdata_Liver$adj.P.Val),DEdata_Liver$logFC, pch=19)
+points(log(DEdata_Liver$adj.P.Val[abs(DEdata_Liver$adj.P.Val)<0.001]),DEdata_Liver$logFC[abs(DEdata_Liver$adj.P.Val)<0.001], pch=19, col="tomato3")
+```
+

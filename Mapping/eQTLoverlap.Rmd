@@ -1,0 +1,216 @@
+---
+title: "eQTL overlap B6 vs BXD references"
+author: "Nastassia Gobet"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    code_folding: hide
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    df_print: paged
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, fig.path="Graphs/eQTLoverlap/", warning=TRUE)
+
+#load needed libraries
+library(knitr)
+library(vioplot)
+library(VennDiagram)
+
+# set working directory
+##setwd("F:/BXD/analysis/Mapping")
+```
+
+# Goal
+
+Check overlap between eQTLs with mm9, mm10, and BXD-specific references and make a venn diagram.
+
+* method 1: check markers (marker IDs)
+* method 2: check if coordinates of markers matching even if different coordinates systems
+* method 3: grouped eQTLs with reference as covariables
+
+# Information
+
+Doing this in default STAR setting (genotypesandimputed_withannotation_Local_0_10) because also available with B6 mm10 reference (abbreviated B6)
+
+FastQTL output (http://fastqtl.sourceforge.net/):
+
+* rowname = ID molecular phenotype (gene)
+* V2 = number of variant tested
+* V3 = MLE of shape 1 parameter of beta distribution
+* V4 = MLE of shape 2 parameters of beta distribution
+* V5 = to be described (not explained on FastQTL website)
+* V6 = ID of best variant
+* V7 = distance between variant and molecular phenotype
+* V8 = p-value of association between variant and molecular phenotype
+* V9 = slope of regression
+* V10 = first permutation p-value accounting for multiple variants tested by molecular phenotype
+* V11 = second permutation p-value obtained with beta approximation (recommended to use this one)
+
+# Preparation
+
+## Functions definitions
+
+```{r FunctionsDefinitions}
+prepareRawCounts <- function(counts, ref){
+  
+  # convert gene ids to gene names
+  idx_uniq <- which(!duplicated(GeneConvert$V2[match(rownames(counts), GeneConvert$V1)]))
+  counts <- counts[idx_uniq,]
+  rownames(counts) <- GeneConvert$V2[match(rownames(counts), GeneConvert$V1)]
+  
+  # change X into C for cortex
+  colnames(counts) <- gsub("X", "C", colnames(counts))
+  # split by tissue and condition
+  CortexNSD <- subset(counts, select=grep("^C[0-9]*nsd$", colnames(counts), value=TRUE))
+  CortexSD <- subset(counts, select=grep("^C[0-9]*sd$", colnames(counts), value=TRUE))
+  LiverNSD <- subset(counts, select=grep("^L[0-9]*nsd$", colnames(counts), value=TRUE))
+  LiverSD <- subset(counts, select=grep("^L[0-9]*sd$", colnames(counts), value=TRUE))
+  # clean and formate names of mouse lines
+  colnames(CortexNSD) <- LinesNames$V5[match(gsub("[LCnsd]", "", colnames(CortexNSD)), LinesNames$V10)]
+  colnames(CortexSD) <- LinesNames$V5[match(gsub("[LCnsd]", "", colnames(CortexSD)), LinesNames$V10)]
+  colnames(LiverNSD) <- LinesNames$V5[match(gsub("[LCnsd]", "", colnames(LiverNSD)), LinesNames$V10)]
+  colnames(LiverSD) <- LinesNames$V5[match(gsub("[LCnsd]", "", colnames(LiverSD)), LinesNames$V10)]
+  
+  # output 4 datasets
+  assign(paste0("counts", ref, "ref_CortexNSD"), CortexNSD, envir=parent.frame())
+  assign(paste0("counts", ref, "ref_CortexSD"), CortexSD, envir=parent.frame())
+  assign(paste0("counts", ref, "ref_LiverNSD"), LiverNSD, envir=parent.frame())
+  assign(paste0("counts", ref, "ref_LiverSD"), LiverSD, envir=parent.frame())
+}
+
+# plot gene expression for a pair gene-variant
+plotGeneExpressionVariant <- function(ref, gene, variant, tissue, condition){
+  # get first letter of tissue
+   t <- unlist(strsplit(tissue, split=""))[1]
+  # get gene expression dataset
+  expr <- eval(parse(text=paste0("expr", ref, "ref", t, condition)))
+  # plot
+  plot(as.numeric(expr[gene, sort(names(expr))]), pch=19, col=as.factor(genotypesGN[genotypesGN$Locus==variant, sort(names(expr))]), main=paste0("Gene: ", gene,", ref: ", ref, ", variant: ", variant, ", tissue: ", tissue, ", condition: ", condition), xaxt="n", xlab="", ylab="gene expression", las=1)
+  axis(1, 1:length(names(expr)), sort(names(expr)), las=2)
+}
+# vectorize function
+plotGeneExpressionVariant <- Vectorize(plotGeneExpressionVariant, SIMPLIFY=FALSE)
+```
+
+## Data preparation
+
+```{r DataPreparation}
+# load table to convert mouse line names
+LinesNames <- read.table("F:/BXD/data/ConvertLineNames.tsv", header=FALSE, stringsAsFactors=FALSE, sep="\t")
+
+# load table to convert between gene id and gene name
+GeneConvert <- read.table("F:/BXD/references/gene_names_B6mm10.tab", header=FALSE, stringsAsFactors=FALSE, sep="\t")
+
+# retrieve GeneNetwork (GN) genotypes
+genotypesGN <- read.table("F:/BXD/data/genome/BXDGenotypes.geno", header=TRUE)
+
+# retrieve eQTL results
+for(tissue in c("Cortex", "Liver")){
+  t <- unlist(strsplit(tissue, split=""))[1]
+  for(condition in c("NSD", "SD")){
+    assign(paste0("dataB6", t, condition), read.table(paste0("F:/BXD/data/transcriptome/eQTL_B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_", tissue, "_", condition, "_pvalcorrected.txt"), row.names=1, stringsAsFactors=FALSE))
+    assign(paste0("dataB6full", t, condition), read.table(paste0("F:/BXD/data/transcriptome/eQTL_B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_", tissue, "_", condition, ".txt"), row.names=1, stringsAsFactors=FALSE))
+    assign(paste0("dataBXD", t, condition), read.table(paste0("F:/BXD/data/transcriptome/eQTL_BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_", tissue, "_", condition,"_pvalcorrected.txt"), row.names=1, stringsAsFactors=FALSE))
+    assign(paste0("dataBXDfull", t, condition), read.table(paste0("F:/BXD/data/transcriptome/eQTL_BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_", tissue, "_", condition, ".txt"), row.names=1, stringsAsFactors=FALSE))
+  }
+}
+
+# retrieve gene expression
+exprB6refCNSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Cortex_NSD.tab")
+exprBXDrefCNSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_Cortex_NSD.tab")
+exprB6refCSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Cortex_SD.tab")
+exprBXDrefCSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_Cortex_SD.tab")
+exprB6refLNSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Liver_NSD.tab")
+exprBXDrefLNSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_Liver_NSD.tab")
+exprB6refLSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Liver_SD.tab")
+exprBXDrefLSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_Liver_SD.tab")
+```
+
+```{r}
+# load mm9 cis-eQTL
+ceLNSD_mm9 <- read.table("F:/BXD/BACKUP/mm9/Data/IntermediateLayer/cis-eQTL/Liver_nsd/ciseQTL.Liver.NSD.pvalcorrected.txt",sep='')
+ceLSD_mm9 <- read.table("F:/BXD/BACKUP/mm9/Data/IntermediateLayer/cis-eQTL/Liver_sd/ciseQTL.Liver.SD.pvalcorrected.txt",sep='')
+ceCNSD_mm9 <- read.table("F:/BXD/BACKUP/mm9/Data/IntermediateLayer/cis-eQTL/Cortex_nsd/ciseQTL.Cortex.NSD.pvalcorrected.txt",sep='')
+ceCSD_mm9 <- read.table("F:/BXD/BACKUP/mm9/Data/IntermediateLayer/cis-eQTL/Cortex_sd/ciseQTL.Cortex.SD.pvalcorrected.txt",sep='')
+# load mm10 cis-eQTL
+ceLNSD_mm10 <- read.table("F:/BXD/BACKUP/mm10/Data/IntermediateLayer/cis-eQTL/ciseQTL.Liver.NSD.pvalcorrected.txt",sep='')
+ceLSD_mm10 <- read.table("F:/BXD/BACKUP/mm10/Data/IntermediateLayer/cis-eQTL/ciseQTL.Liver.SD.pvalcorrected.txt",sep='')
+ceCNSD_mm10 <- read.table("F:/BXD/BACKUP/mm10/Data/IntermediateLayer/cis-eQTL/ciseQTL.Cortex.NSD.pvalcorrected.txt",sep='')
+ceCSD_mm10 <- read.table("F:/BXD/BACKUP/mm10/Data/IntermediateLayer/cis-eQTL/ciseQTL.Cortex.SD.pvalcorrected.txt",sep='')
+```
+
+```{r overlapgene_markerID3ref}
+# gene expression
+exprB6refCNSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_Cortex_NSD.tab")
+exprBXDrefCNSD <- read.table("F:/BXD/data/transcriptome/2_mapping_STAR/OnGenomeAndAnnotation/BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_Cortex_NSD.tab")
+
+# eQTLs
+ceCNSD_mm9 <- read.table("F:/BXD/BACKUP/mm9/Data/IntermediateLayer/cis-eQTL/Cortex_nsd/ciseQTL.Cortex.NSD.pvalcorrected.txt",sep='')
+ceCNSD_mm10K <- read.table("F:/BXD/BACKUP/mm10/Data/IntermediateLayer/cis-eQTL/ciseQTL.Cortex.NSD.pvalcorrected.txt",sep='')
+ceCNSD_mm10 <- read.table(paste0("F:/BXD/data/transcriptome/eQTL_B6mm10primaryassembly_withannotation/TMMnormalized_log2CPM_", "Cortex", "_", "NSD", "_pvalcorrected.txt"), row.names=1, stringsAsFactors=FALSE)
+ceCNSD_BXD <- read.table(paste0("F:/BXD/data/transcriptome/eQTL_BXDfromGNandimputedD2blocks_withannotation/TMMnormalized_log2CPM_", "Cortex", "_", "NSD", "_pvalcorrected.txt"), row.names=1, stringsAsFactors=FALSE)
+
+# remove genes with marker NA
+
+ceCNSD_mm9_noNA <- ceCNSD_mm9[which(!is.na(ceCNSD_mm9$marker)), ]
+ceCNSD_mm10K_noNA <- ceCNSD_mm10K[which(!is.na(ceCNSD_mm10K$marker)), ]
+ceCNSD_mm10_noNA <- ceCNSD_mm10[which(!is.na(ceCNSD_mm10$marker)), ]
+ceCNSD_BXD_noNA <- ceCNSD_BXD[which(!is.na(ceCNSD_BXD$marker)), ]
+
+#############
+
+ceCNSD_mm9_gene_eQTL <- paste(rownames(ceCNSD_mm9_noNA), ceCNSD_mm9_noNA$marker, sep="_")
+ceCNSD_mm10_gene_eQTL <- paste(rownames(ceCNSD_mm10_noNA), ceCNSD_mm10_noNA$marker, sep="_")
+ceCNSD_mm10K_gene_eQTL <- paste(rownames(ceCNSD_mm10K_noNA), ceCNSD_mm10K_noNA$marker, sep="_")
+ceCNSD_BXD_gene_eQTL <- paste(rownames(ceCNSD_BXD_noNA), ceCNSD_BXD_noNA$marker, sep="_")
+
+venn.plot <- venn.diagram(
+  x = list(mm9=ceCNSD_mm9_gene_eQTL, mm10=ceCNSD_mm10_gene_eQTL, BXD=ceCNSD_BXD_gene_eQTL),
+  filename = NULL,
+  main="gene_marker overlap (Cortex NSD)",
+  fontfamily="sans",
+  main.fontfamily="sans",
+  main.cex=2,
+  cat.fontfamily="sans",
+  print.mode = c("raw", "percent"),
+  fill = c("red", "cornflowerblue", "green"),
+  alpha = 0.50
+);
+
+grid.draw(venn.plot)
+```
+
+```{r overlapgene_markerID4ref}
+venn.plot <- venn.diagram(
+  x = list(mm9=ceCNSD_mm9_gene_eQTL, mm10=ceCNSD_mm10_gene_eQTL, BXDspecific=ceCNSD_BXD_gene_eQTL, mm10Kallisto=ceCNSD_mm10K_gene_eQTL),
+  filename = NULL,
+  main="gene_marker overlap (Cortex NSD)",
+  fontfamily="sans",
+  main.fontfamily="sans",
+  main.cex=2,
+  cat.fontfamily="sans",
+  print.mode=c("raw", "percent"),
+  fill = c( "red", "cornflowerblue", "green", "darkorange"),
+  alpha = 0.50
+);
+
+grid.draw(venn.plot)
+```
+
+
+# Session information
+
+```{r}
+sessionInfo()
+```

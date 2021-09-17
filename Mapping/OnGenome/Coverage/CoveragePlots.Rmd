@@ -1,0 +1,102 @@
+---
+title: "Coverage"
+author: "Nastassia Gobet"
+date: "31 July 2019 -"
+output:
+  html_document:
+    code_folding: hide
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    toc_float:
+      collapsed: true
+      smooth_scroll: false
+    df_print: paged
+    keep_md: true
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.path="Graphs/")
+
+library(knitr)
+```
+
+```{r}
+# store all paths to plots
+paths <- array(data="", dim=c(8,20))
+rownames(paths) <- c("B61nsd", "B62nsd", "DB1nsd", "DB2nsd", "LB61nsd", "LB62nsd", "LDB1nsd", "LDB2nsd")
+colnames(paths) <- c(1:19,"X")
+##paths
+
+for(chr in colnames(paths)){
+  for(s in rownames(paths)){
+  paths[s, chr]  <- paste("plots_log_shiftEnd/", s, "_", chr, ".png", sep="")
+  }
+}
+```
+
+
+# plot by chromosome
+
+The order of samples is `r rownames(paths)`. Biological replicates are on the sample row.
+
+```{r, out.width="50%"}
+
+include_graphics(paths[,1])
+include_graphics(paths[,2])
+include_graphics(paths[,3])
+include_graphics(paths[,4])
+include_graphics(paths[,5])
+include_graphics(paths[,6])
+include_graphics(paths[,7])
+include_graphics(paths[,8])
+include_graphics(paths[,9])
+include_graphics(paths[,10])
+include_graphics(paths[,11])
+include_graphics(paths[,12])
+include_graphics(paths[,13])
+include_graphics(paths[,14])
+include_graphics(paths[,15])
+include_graphics(paths[,16])
+include_graphics(paths[,17])
+include_graphics(paths[,18])
+include_graphics(paths[,19])
+include_graphics(paths[,"X"])
+##Graphs <- c("plots/B61nsd_1.png", "plots/B62nsd_1.png")
+##include_graphics(unlist(Graphs))
+
+##include_graphics(c(paths["LB62nsd","X"],paths["LB62nsd","X"],paths["LB62nsd","X"],paths["B62nsd",4],paths["LB62nsd","X"],paths["LB62nsd","X"],paths["LB62nsd","X"],paths["LB62nsd","X"]))
+```
+
+
+# plot by sample
+
+```{r, out.width="50%"}
+include_graphics(paths["B61nsd",])
+include_graphics(paths["B62nsd",])
+include_graphics(paths["DB1nsd",])
+include_graphics(paths["DB2nsd",])
+include_graphics(paths["LB61nsd",])
+include_graphics(paths["LB62nsd",])
+include_graphics(paths["LDB1nsd",])
+include_graphics(paths["LDB2nsd",])
+
+```
+
+
+# Session information
+
+This document is built with R version `r paste(R.version$major, R.version$minor, sep=".")`. More info:
+
+```{r}
+# Rstudio session info
+sessionInfo()
+```

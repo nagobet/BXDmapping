@@ -1,0 +1,212 @@
+---
+title: README_Mapping
+author: Nastassia Gobet
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    keep_md: yes
+    code_folding: hide
+    fig_caption: yes
+    highlight: tango
+    number_sections: no
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    df_print: paged
+  github_document:
+    toc: true
+    toc_depth: 4
+  pdf_document:
+    fig_caption: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+always_allow_html: true
+---
+
+# Goal
+
+Highlight important scripts and clarify workflows.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, fig.path="Graphs/", warning=TRUE)
+
+# needed libraries
+library(DiagrammeR)
+
+# set working directory
+##setwd("F:/BXD/analysis/")
+```
+
+
+# Scripts
+
+## Coding habits
+
+Keywords used in script names:
+
+* "main": refers to meta-scripts, grouping multiple tasks and calling other scripts.
+* "listcommands": refers to list of commands that are then executed (in parallel).
+* "OnCluster": refers to scripts adapted to UNIL Wally cluster environnment; can include changes in paths and handling of software stack and SLURM job submission system.
+
+Scripts normally have a line starting by '# GOAL:' to state the aim of the script, except if they are in the "listcommands" category.
+
+Line starting by '##' indicates historical code (not run but may be useful to keep for future).
+
+Line starting by '###' indicates a problem.
+
+## Important scripts
+
+Important (low-level) scripts and what they do.
+
+```{r}
+# create function to retrieve goal from script
+retrieveGoal <- function(filename){
+  FileInput <- readLines(filename) 
+  goal <- grep("# GOAL", FileInput, value=TRUE)
+  return(c(filename, goal))
+}
+
+# key scripts with goal specified
+retrieveGoal("scripts/mapping/MappingOptimization_main.sh")
+retrieveGoal("scripts/mapping/MappingOptimizationOnCluster_main.sh")
+retrieveGoal("scripts/mapping/MergeCount.sh")
+retrieveGoal("scripts/mapping/filterSamplesCounts.R")
+retrieveGoal("scripts/mapping/normalizeGeneCountsCPM.R")
+
+retrieveGoal("scripts/mapping/testingFiltering.R")
+retrieveGoal("scripts/mapping/eQTLdetectionFilteringTesting_main.sh")
+retrieveGoal("scripts/mapping/correctMultiPhenotypeseQTL.R")
+
+retrieveGoal("scripts/mapping/BXDspecific_references_databasebased.sh")
+retrieveGoal("scripts/mapping/BXDspecific_references_genotypebased.sh")
+retrieveGoal("scripts/mapping/GenotypeImputation_D2blockmethod.sh")
+retrieveGoal("scripts/lowlayer/ExtractD2blocksforBXD_main.R")
+retrieveGoal("scripts/lowlayer/extractD2Blocks.R")
+
+# supplementary analyses
+retrieveGoal("scripts/mapping/STARmappingB6mm9_main.sh")
+retrieveGoal("scripts/mapping/STARmappingB6mm10primaryassembly_main.sh")
+retrieveGoal("scripts/mapping/STARmappingD2_main.sh")
+retrieveGoal("scripts/mapping/STARmappingD2fromB6_main.sh")
+retrieveGoal("scripts/mapping/genesBiotypes.sh")
+retrieveGoal("scripts/mapping/plot_biotypes.R")
+retrieveGoal("scripts/mapping/mappingKallisto.sh")
+retrieveGoal("scripts/mapping/retrieveGenePosition.R")
+retrieveGoal("scripts/mapping/normalizeGeneCountsTPM.R")
+retrieveGoal("scripts/mapping/normalizeGeneCountsTPM_B6mm10.R")
+
+retrieveGoal("scripts/mapping/periodicity.R")
+```
+
+## Analyses
+
+The higher level analysis and graph production is in analysis/Mapping, with mostly Rmarkdown documents.
+
+
+## R packages loaded
+
+```{r}
+# retrieve names
+myfiles <- c(list.files(path="Mapping", pattern=".[Rmd]$", full.names=TRUE),list.files(path="scripts/mapping", pattern=".[Rmd]$", full.names=TRUE)) 
+
+all_lib <- c()
+for(i in myfiles){
+  all_lib <- c(all_lib, grep("library\\(", readLines(i), value=TRUE))
+}
+
+# clean (remove duplicates)
+unique(sort(all_lib))
+```
+
+
+# Workflows
+
+The legend used is workflow schemes:
+
+```{r workflowsLegend, fig.dim=c(2.5,2.5)}
+grViz("
+digraph legend {
+
+  # a 'graph' statement
+  graph [fontsize=16 rankdir=LR]
+
+  # file nodes
+  node [shape=box]
+  'file (format)'
+  
+  # script edges
+  ' '->'' [label='script']
+}
+")
+```
+
+## cis eQTL analysis
+```{r ciseQTLanalysis, fig.dim=c(10,5)}
+grViz("
+digraph ciseQTLanalysis {
+
+  # a 'graph' statement
+  graph [rankdir=LR fontsize=16]
+
+  # file nodes
+  node [shape=box]
+  'transcriptome annotation (.gtf)'; 'genotypes (.geno)'; 'normalized gene expression (.tab)';
+  'cis eQTL (.txt)'; 'cis eQTL pcorrected (.txt)'
+
+  # script edges
+  'transcriptome annotation (.gtf)' -> 'transcriptome annotation (.bed)' [label='create_BED_UCSC.py', fontname=Helvetica]
+  'genotypes (.geno)' -> 'genotypes (.vcf)' [label='GeneToVcf.py', fontname=Helvetica]
+  'cis eQTL (.txt)' -> 'cis eQTL pcorrected (.txt)' [label='correctMultiPhenotypeseQTL.R', fontname=Helvetica]
+  {'genotypes (.vcf)' 'transcriptome annotation (.bed)' 'normalized gene expression (.tab)'} -> 'cis eQTL (.txt)' [label='ciseQTLAnalysis.sh', fontname=Helvetica]
+}
+")
+```
+
+## Gene normalization
+
+```{r GeneNormalization, fig.dim=c(10,3)}
+grViz("
+digraph GeneNormalization {
+
+  # a 'graph' statement
+  graph [rankdir=LR fontsize=16]
+
+  # file nodes
+  node [shape=box]
+  'sample counts (.tab)'; 'grouped counts (.tab)'; 'normalized gene expression (.tab)';
+
+  # script edges
+  'sample counts (.tab)' -> 'grouped counts (.tab)' [label='MergeCount.sh', fontname=Helvetica]
+  'grouped counts (.tab)' -> 'normalized gene expression (.tab)' [label='normalizeGeneCountsCPM.R', fontname=Helvetica]
+}
+")
+```
+
+## Filtering evaluation
+
+```{r FilteringEvaluation, fig.dim=c(10,3)}
+grViz("
+digraph FilteringEvaluation {
+
+  # a 'graph' statement
+  graph [rankdir=LR fontsize=16]
+
+  # file nodes
+  node [shape=box]
+  'grouped counts (.tab)'; 'filtered and normalized gene expression (.tab)'; 'cis eQTL (.txt)'
+
+  # script edges
+  'grouped counts (.tab)' -> 'filtered and normalized gene expression (.tab)' [label='testingFiltering.R', fontname=Helvetica]
+  'filtered and normalized gene expression (.tab)' -> 'cis eQTL (.txt)' [label='eQTLdetectionFilteringTesting_main.sh', fontname=Helvetica]
+}
+")
+```
+
+
+# R session information
+
+```{r}
+sessionInfo()
+```
+

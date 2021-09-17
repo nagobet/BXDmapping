@@ -1,0 +1,11 @@
+##############
+# Versioning #
+##############
+
+# GOAL: This file gives an history of manual versioning of this analysis.
+
+
+# 20190415 saved before to add AKRJ mapping data
+# 20190417 saved before to clean (remove exploratory graphs), improve structure, and add new hypotheses
+
+# current version has no date.

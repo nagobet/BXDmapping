@@ -1,0 +1,18 @@
+# ignore xml files (IGV)
+*.xml
+# ignore pdf files
+*.pdf
+# ignore jpg files 
+*.jpg
+# ignore png files
+*.png
+# ignore Rhistory files
+*.Rhistory
+# ignore log files
+*.log
+
+# ignore Thumbs.db (Windows OS file)
+Thumbs.db
+
+# ignore cache directories
+*_cache
