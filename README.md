@@ -4,10 +4,6 @@ This project is about integrating genetic diversity in RNA-sequencing (RNA-seq) 
 
 Keywords: RNA-sequencing, reads mapping, genomic/genetic variants, genome reference, mouse, BXD panel, eQTL
 
-# Goal
-
-This repository serves to backup and organize my code.
-
 # References
 
 The RNA-seq dataset comes from this paper: [A systems genetics resource and analysis of sleep regulation in the mouse](https://journals.plos.org/plosbiology/article?id=10.1371/journal.pbio.2005750) in PLOS Biology.
