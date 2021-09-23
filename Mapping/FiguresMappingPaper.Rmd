@@ -1,8 +1,10 @@
 ---
-title: "Figures BXD mapping paper"
-author: "Nastassia Gobet"
-date: '`r Sys.Date()`'
+##title: "Figures BXD mapping paper"
+##author: "Nastassia Gobet"
+##date: '`r Sys.Date()`'
 output:
+  pdf_document:
+    fig_caption: yes
   html_document:
     code_folding: hide
     df_print: paged
@@ -12,8 +14,6 @@ output:
     theme: readable
     toc: yes
     toc_depth: 4
-  pdf_document:
-    fig_caption: yes
   word_document:
     toc: yes
     toc_depth: '4'
@@ -33,11 +33,13 @@ library(plotrix)
 ##setwd("F:/BXD/analysis/Mapping")
 ```
 
-# Goal
+\pagenumbering{gobble}
 
-The goal is to produce the figures for the BXD mapping paper.
+<!-- # Goal -->
 
-# Figures
+<!-- The goal is to produce the figures for the BXD mapping paper. -->
+
+<!-- # Figures -->
 
 ## Figure 1: Including genomic variants in inbred mouse transcriptome read mapping overview.
 
@@ -169,6 +171,7 @@ B) Mappability of parental and F1 (BxD and DxB) samples on 2 parental assemblies
 C) Mappability of parental and F1 samples on 2 parental assemblies using restrictive mapping setting but allowing up to 10 mismatches. Same legend than in A.
 D) Differential mapping (DM) analysis of D2 assembly compared to GRCm38 in the cortex (left) or in the liver (right). Genes are classified as DM genes if FDR adjusted p-value < 0.05 (red) or non DM genes otherwise (black).
 
+\newpage
 
 ## Figure 3: Line-specific references strategy.
 
@@ -235,9 +238,9 @@ DMdataBXD_Cortex <- read.table('F:/BXD/data/transcriptome/5_DifferentialMapping/
 DMdataBXD_Liver <- read.table('F:/BXD/data/transcriptome/5_DifferentialMapping/DifferentialMappingBXDvsB6mm10permissive_Limma_Liver.txt', sep="\t")
 ```
 
-For GRCm38 vs D2 assembly, `r round(length(which(DMdata_Cortex$adj.P.Val<=0.05))/length(DMdata_Cortex$adj.P.Val)*100)`% of genes are significantly (below or equal to 0.05) differentially mapped in cortex, and `r round(length(which(DMdata_Liver$adj.P.Val<=0.05))/length(DMdata_Liver$adj.P.Val)*100)`% in liver.
+<!-- For GRCm38 vs D2 assembly, `r round(length(which(DMdata_Cortex$adj.P.Val<=0.05))/length(DMdata_Cortex$adj.P.Val)*100)`% of genes are significantly (below or equal to 0.05) differentially mapped in cortex, and `r round(length(which(DMdata_Liver$adj.P.Val<=0.05))/length(DMdata_Liver$adj.P.Val)*100)`% in liver. -->
 
-For GRCm38 vs BXD-specific, `r round(length(which(DMdataBXD_Cortex$adj.P.Val<=0.05))/length(DMdata_Cortex$adj.P.Val)*100)`% of genes are significantly (below or equal to 0.05) differentially mapped in cortex, and `r round(length(which(DMdataBXD_Liver$adj.P.Val<=0.05))/length(DMdata_Liver$adj.P.Val)*100)`% in liver.
+<!-- For GRCm38 vs BXD-specific, `r round(length(which(DMdataBXD_Cortex$adj.P.Val<=0.05))/length(DMdata_Cortex$adj.P.Val)*100)`% of genes are significantly (below or equal to 0.05) differentially mapped in cortex, and `r round(length(which(DMdataBXD_Liver$adj.P.Val<=0.05))/length(DMdata_Liver$adj.P.Val)*100)`% in liver. -->
 
 ```{r Figure3_Line-specificReferencesStrategy, fig.height=5, fig.width=7}
 layout(matrix(c(1,2,3,4,4,4), nrow=2, ncol=3, byrow=TRUE))
@@ -521,8 +524,8 @@ A) The performance on local eQTLs of selected mapping settings on cortex samples
 B) The performance on local eQTLs of selected mapping settings on liver samples (average between NSD and SD conditions) is measured by the percentage of expressed genes than have a significant local eQTLs.
 
 
-# R session info
+<!-- # R session info -->
 
-```{r sessionInfo}
-sessionInfo()
-```
+<!-- ```{r sessionInfo} -->
+<!-- sessionInfo() -->
+<!-- ``` -->

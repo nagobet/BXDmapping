@@ -1,8 +1,10 @@
 ---
-title: "Figures Supplementary Mapping Paper"
-author: "Nastassia Gobet"
-date: '`r Sys.Date()`'
+##title: "Figures Supplementary Mapping Paper"
+##author: "Nastassia Gobet"
+##date: '`r Sys.Date()`'
 output:
+  pdf_document:
+    fig_caption: yes
   html_document:
     code_folding: hide
     df_print: paged
@@ -12,8 +14,6 @@ output:
     theme: readable
     toc: yes
     toc_depth: 4
-  pdf_document:
-    fig_caption: yes
   word_document:
     toc: yes
     toc_depth: '4'
@@ -33,9 +33,11 @@ library(plotrix)
 ##setwd("F:/BXD/analysis/Mapping")
 ```
 
-# Goal
+\pagenumbering{gobble}
 
-The goal is to use Rmarkdown to produce the supplementary figures for the mapping paper.
+<!-- # Goal -->
+
+<!-- The goal is to use Rmarkdown to produce the supplementary figures for the mapping paper. -->
 
 
 # Supplementary figures
@@ -135,6 +137,7 @@ B)	Pseudo-mappability of all samples on 2 parental assembly transcriptomes using
 C)	Mappability of parental and F1 samples on 2 parental assembly transcriptomes using STAR restrictive mapping setting.
 D)	Mappability of parental and F1 samples on 2 parental assembly transcriptomes using STAR restrictive mapping setting, but up to 10 mismatches.
 
+\newpage
 
 ## Figure S2: Examples of artefacts of assemblies sequence and annotation.
 
@@ -158,6 +161,8 @@ __Figure S2: Examples of artefacts of assemblies sequence and annotation.__
 A) *Nova2* genomic region in Integrative Genomics Viewer (IGV), as an transcriptome annotation artefact. The coverage is very similar between B6 and D2 assemblies, but the annotation differs, which causes the reads to be counted differently.
 B) *Gm15564* genomic sequence in IGV, as a artefact due to difference in completeness of genome assembly. Many reads map to this region on B6 assembly, but not on D2. It appears that in this region of the D2 assembly there are three unknown nucleotides (with label "N"), which supports the interpretation that it is probably due a difference in assembly quality, and not to a genomic variant.
 
+\newpage
+
 ## Figure S3: Genotype imputation workflow.
 
 ```{r FigureS3_ConsequencesOfMappingReferenceBiasInGeneLevels, fig.height=5}
@@ -170,6 +175,8 @@ image_append(figS3A, stack=TRUE)
 ```
 
 __Figure S3: Genotype imputation workflow.__
+
+\newpage
 
 ## Figure S4: Consequences of mapping reference at local eQTL level in SD condition.
 
@@ -285,8 +292,8 @@ A) Local eQTLs overlapping in cortex SD between GRCm38 and BXD-specific referenc
 B) Local eQTLs overlapping in liver SD between GRCm38 and BXD-specific references.
 
 
-# R session info
+<!-- # R session info -->
 
-```{r sessionInfo}
-sessionInfo()
-```
+<!-- ```{r sessionInfo} -->
+<!-- sessionInfo() -->
+<!-- ``` -->
