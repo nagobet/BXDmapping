@@ -1,7 +1,5 @@
 # Biotype genes analysis of DM genes
 
-# 7 January 2020
-
 # data
 tot_genes <- c(4119, 2497, 13860, 11132)
 protein_coding <- c(3970, 2442, 12967, 10794)
@@ -10,20 +8,16 @@ protein_coding <- c(3970, 2442, 12967, 10794)
 bp <- barplot(t(cbind(protein_coding,tot_genes-protein_coding)), pch=19, las=1, names.arg=c("DM_Cortex", "DM_Liver", "Total_Cortex", "Total_Liver"),col=c("grey40","grey70"))
 text(bp, rep(1,4), label=paste(round(protein_coding/tot_genes*100),"%"), pos=3)
 
-# 8 January 2020
-
 # GOAL: plot more biotypes
-
 # load data
-DM_cortexB6 <- read.table("F:BXD/data/transcriptome/6_Biotypes/summaryB6BiotypesDM_Cortex.tab", stringsAsFactors=FALSE)
-DM_liverB6 <- read.table("F:BXD/data/transcriptome/6_Biotypes/summaryB6BiotypesDM_Liver.tab", stringsAsFactors=FALSE)
-all_cortexB6 <- read.table("F:BXD/data/transcriptome/6_Biotypes/summaryB6BiotypesTotal_Cortex.tab", stringsAsFactors=FALSE)
-all_liverB6 <- read.table("F:BXD/data/transcriptome/6_Biotypes/summaryB6BiotypesTotal_Liver.tab", stringsAsFactors=FALSE)
-DM_cortexD2 <- read.table("F:BXD/data/transcriptome/6_Biotypes/summaryD2BiotypesDM_Cortex.tab", stringsAsFactors=FALSE)
-DM_liverD2 <- read.table("F:BXD/data/transcriptome/6_Biotypes/summaryD2BiotypesDM_Liver.tab", stringsAsFactors=FALSE)
-all_cortexD2 <- read.table("F:BXD/data/transcriptome/6_Biotypes/summaryD2BiotypesTotal_Cortex.tab", stringsAsFactors=FALSE)
-all_liverD2 <- read.table("F:BXD/data/transcriptome/6_Biotypes/summaryD2BiotypesTotal_Liver.tab", stringsAsFactors=FALSE)
-
+DM_cortexB6 <- read.table("F:/BXD/data/transcriptome/6_Biotypes/summaryB6BiotypesDM_Cortex.tab", stringsAsFactors=FALSE)
+DM_liverB6 <- read.table("F:/BXD/data/transcriptome/6_Biotypes/summaryB6BiotypesDM_Liver.tab", stringsAsFactors=FALSE)
+all_cortexB6 <- read.table("F:/BXD/data/transcriptome/6_Biotypes/summaryB6BiotypesTotal_Cortex.tab", stringsAsFactors=FALSE)
+all_liverB6 <- read.table("F:/BXD/data/transcriptome/6_Biotypes/summaryB6BiotypesTotal_Liver.tab", stringsAsFactors=FALSE)
+DM_cortexD2 <- read.table("F:/BXD/data/transcriptome/6_Biotypes/summaryD2BiotypesDM_Cortex.tab", stringsAsFactors=FALSE)
+DM_liverD2 <- read.table("F:/BXD/data/transcriptome/6_Biotypes/summaryD2BiotypesDM_Liver.tab", stringsAsFactors=FALSE)
+all_cortexD2 <- read.table("F:/BXD/data/transcriptome/6_Biotypes/summaryD2BiotypesTotal_Cortex.tab", stringsAsFactors=FALSE)
+all_liverD2 <- read.table("F:/BXD/data/transcriptome/6_Biotypes/summaryD2BiotypesTotal_Liver.tab", stringsAsFactors=FALSE)
 
 # adjusting margins
 par(mar=c(4.1, 14.1, 2.1, 0.6))
@@ -32,8 +26,6 @@ barplot(all_cortex$V1, names.arg=all_cortex$V2, las=1, horiz=TRUE, cex.names=0.9
 barplot(all_liver$V1, names.arg=all_liver$V2, las=1, horiz=TRUE, cex.names=0.9, xlab="Number of genes", main="Biotypes (Total Liver)")
 barplot(DM_cortex$V1, names.arg=DM_cortex$V2, las=1, horiz=TRUE, cex.names=0.9, xlab="Number of genes", main="Biotypes (DM Cortex)")
 barplot(DM_liver$V1, names.arg=DM_liver$V2, las=1, horiz=TRUE, cex.names=0.9, xlab="Number of genes", main="Biotypes (DM Liver)")
-
-# 9 January 2020
 
 # Goal: plotting beside and use categories
 
@@ -145,3 +137,11 @@ barplot(dataD2, las=1, beside=TRUE, col=gray.colors(5,0,1),
 barplot(t(t(dataD2)/apply(dataD2,2,sum))*100, ylim=c(0,100), las=1, beside=TRUE, col=gray.colors(5,0,1),
         ylab="% genes", main="Biotypes (D2)",
         legend.text=unique(categories), args.legend=list(x="topright"))
+
+# 27 May 2022
+
+# calculate enrichment
+round(dataB6["pseudogenes","DM_cortex"] / sum(dataB6[,"DM_cortex"]) / (dataB6["pseudogenes","all_cortex"] / sum(dataB6[,"all_cortex"])), 1)
+round(dataB6["pseudogenes","DM_liver"] / sum(dataB6[,"DM_liver"]) / (dataB6["pseudogenes","all_liver"] / sum(dataB6[,"all_liver"])), 1)
+round(dataD2["pseudogenes","DM_cortex"] / sum(dataD2[,"DM_cortex"]) / (dataD2["pseudogenes","all_cortex"] / sum(dataD2[,"all_cortex"])), 1)
+round(dataD2["pseudogenes","DM_liver"] / sum(dataD2[,"DM_liver"]) / (dataD2["pseudogenes","all_liver"] / sum(dataD2[,"all_liver"])), 1)
