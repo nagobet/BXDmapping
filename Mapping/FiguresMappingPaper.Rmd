@@ -1,10 +1,8 @@
 ---
-##title: "Figures BXD mapping paper"
-##author: "Nastassia Gobet"
-##date: '`r Sys.Date()`'
+title: "Figures BXD mapping paper"
+author: "Nastassia Gobet"
+date: '`r Sys.Date()`'
 output:
-  pdf_document:
-    fig_caption: yes
   html_document:
     code_folding: hide
     df_print: paged
@@ -14,6 +12,8 @@ output:
     theme: readable
     toc: yes
     toc_depth: 4
+  pdf_document:
+    fig_caption: yes
   word_document:
     toc: yes
     toc_depth: '4'
@@ -54,7 +54,7 @@ fig1a <- image_annotate(BXDpanel, "A", size=36, location="+0+0", color="black")
 # get simplified RNA-seq workflow 
 BXDmappingstrategy <- image_read_svg("A:/CIG/USERS/ngobet/Communication/Figures/Mapping_paper/BXDmappingstrategy_20210621.svg", height=500)
 # add letter for panel
-fig1b <- image_annotate(BXDmappingstrategy, "B", size=36, location="+0+0", color="black")
+fig1b <- image_annotate(BXDmappingstrategy, "B", size=36, location="0+0", color="black")
 
 # C
 # number of variants per category
@@ -81,11 +81,12 @@ image_append(c(toppanels, bottompanels), stack=TRUE)
 
 __Figure 1 | Including genomic variants in inbred mouse transcriptome read mapping overview.__
 
-A) BXD mouse recombinant inbred panel. Samples come from mice that are: BXD advanced recombinant inbred lines, parental inbred strains which are C57BL/6J (B6) and DBA/2J (D2), and not inbred first generation cross between the parental strains (F1).
-B) RNA-seq read mapping strategies in this study.
-C) BXD genotypes available from GeneNetwork and D2-specific genomic variants available from dbSNP.
-D) Genotypes imputation workflow. B6 regions or alleles are in black, D2 regions or alleles are in brown.
+A) BXD mouse recombinant inbred panel. Samples come from mice that are: BXD advanced recombinant inbred lines, their parental inbred strains; i.e., C57BL/6J (B6) and DBA/2J (D2), and first generation cross between the parental strains (F1).
+B) The 3 RNA-seq read mapping strategies used in this study. In the ‘two parental assemblies’ strategy (left), the reads of all samples are mapped to the classical mouse genome assembly (GRCm38 or mm10) and to the D2 assembly. The ‘BXD-specific references’ (middle) were made from GRCm38 and BXD-specific variants. There is one reference for each BXD line, and the reads of each sample are mapped to the corresponding reference. The ‘two parental references’ (right panel) is an intermediate strategy in which the D2-specific reference is built from GRCm38 assembly and D2-specific variants.
+C) BXD genotypes available from GeneNetwork (genotypes) and D2-specific genomic variants (SNVs, indels, SVs) available from dbSNP.
+D) Genotypes imputation workflow. D2 haplotype blocks were delineated based on available genotypes in the BXD lines. D2-specific variants within these D2 blocks were included in the BXD-specific references. B6 regions or alleles are in black, D2 regions or alleles are in brown.
 
+\newpage
 
 ## Figure 2: Two parental assemblies strategy.
 
@@ -152,13 +153,13 @@ axis(1, at=c(6.5,18.5), line=2, tick=FALSE, labels=c("cortex", "liver"))
 # plot for Cortex
 palette(c("black", "red3"))
 plot(1:nrow(DMdata_Cortex), DMdata_Cortex$logFC, las=2, pch=20, col=as.factor(DMdata_Cortex$adj.P.Val<=0.05), cex.main=0.9,
-       main="DM in Cortex (GRCm38 vs D2)", xlab="rank of adjusted p-value", ylab="-logFC")
+       main="DM in Cortex (GRCm38 vs D2)", xlab="rank of adjusted p-value", ylab=expression("log"[2]~"(FC)"))
 
 # panel D right
 # plot for Liver
 plot(1:nrow(DMdata_Liver), DMdata_Liver$logFC, las=2, pch=20, 
      col=as.factor(DMdata_Liver$adj.P.Val<=0.05), cex.main=0.9,
-       main="DM in Liver (GRCm38 vs D2)", xlab="rank of adjusted p-value", ylab="-logFC")
+       main="DM in Liver (GRCm38 vs D2)", xlab="rank of adjusted p-value", ylab=expression("log"[2]~"(FC)"))
 
 # add panel labels (letters)
 mtext(LETTERS[1:4], side=3, line=0, adj=c(0,0.70,0,0.34), padj=c(1.5,1.5,15,15), cex=1.5, outer=TRUE)
@@ -166,10 +167,10 @@ mtext(LETTERS[1:4], side=3, line=0, adj=c(0,0.70,0,0.34), padj=c(1.5,1.5,15,15),
 
 __Figure 2 | Two parental assemblies strategy.__
 
-A) Mappability of all samples on 2 parental assemblies (samples are mapped on GRCm38: black symbols and on D2 assembly: brown symbols) using permissive mapping setting (STAR default) in cortex (left) and liver (right).
-B) Mappability of parental and F1 (BxD and DxB) samples on 2 parental assemblies using restrictive mapping setting allowing 0 mismatches. Same legend than in A.
+A) Mappability of all samples on 2 parental assemblies (samples are mapped on GRCm38: black symbols and on D2 assembly: brown symbols) using permissive mapping setting (STAR default) in cortex (left) and liver (right). Mappability was estimated as the number of uniquely mapped reads expressed as the % of all reads.
+B) Mappability in samples from the parental strains and their reciprocal F1 offspring (BxD and DxB) on the 2 parental assemblies using restrictive mapping setting allowing 0 mismatches. Same legend than in A.
 C) Mappability of parental and F1 samples on 2 parental assemblies using restrictive mapping setting but allowing up to 10 mismatches. Same legend than in A.
-D) Differential mapping (DM) analysis of D2 assembly compared to GRCm38 in the cortex (left) or in the liver (right). Genes are classified as DM genes if FDR adjusted p-value < 0.05 (red) or non DM genes otherwise (black).
+D) Differential mapping (DM) analysis of D2 assembly compared to GRCm38 in the cortex (left) or in the liver (right). Genes are classified as DM genes if FDR adjusted p value < 0.05 (red) or non DM genes otherwise (black).
 
 \newpage
 
@@ -264,11 +265,11 @@ axis(3, at=c(3,11), labels=c("Cortex", "Liver"), line=-1, tick=FALSE)
 # panel B left
 palette(c("black", "red3"))
 plot(1:nrow(DMdataBXD_Cortex), DMdataBXD_Cortex$logFC, las=1, pch=20, col=as.factor(DMdataBXD_Cortex$adj.P.Val<=0.05),
-       main="DM in Cortex (GRCm38 vs BXD)", xlab="rank of adjusted p-value", ylab="-logFC")
+       main="DM in Cortex (GRCm38 vs BXD)", xlab="rank of adjusted p-value", ylab=expression("log"[2]~"(FC)"))
 
 # panel B right
 plot(1:nrow(DMdataBXD_Liver), DMdataBXD_Liver$logFC, las=1, pch=20, col=as.factor(DMdataBXD_Liver$adj.P.Val<=0.05),
-       main="DM in Liver (GRCm38 vs BXD)", xlab="rank of adjusted p-value", ylab="-logFC")
+       main="DM in Liver (GRCm38 vs BXD)", xlab="rank of adjusted p-value", ylab=expression("log"[2]~"(FC)"))
 
 # panel C
 palette(c("lightskyblue", "darkblue", "coral1", "darkred"))
@@ -285,8 +286,9 @@ mtext(LETTERS[1:3], side=3, line=0, adj=c(0,0.34,0), padj=c(1.5,1.5,15), cex=1.5
 __Figure 3 | Line-specific references strategy.__
 
 A) Relative mappability of customized D2-specific reference (GRCm38 modified with D2-specific indels and SNVs from dbSNP) compared to GRCm38 on parental and F1 samples with exact matches. Samples are all NSD. Colors indicate genetic of the samples: B6 (black), D2 (light brown), and F1 (white) between B6 and D2 strains. The F1 samples are BxD if the mother is B6 and the father is D2 (as for the BXD lines), or the reverse for DxB.
-B) Differential mapping (DM) analysis of customized BXD specific references compared to GRCm38, in the cortex (left) or in the liver (right). Genes are classified as DM genes if FDR adjusted p-value < 0.05 (red) or non DM genes otherwise (black).
+B) Differential mapping (DM) analysis of BXD-specific references compared to GRCm38, in the cortex (left) or in the liver (right). Genes are classified as DM genes if FDR adjusted p-value < 0.05 (red) or non DM genes otherwise (black).
 C) Relative mappability of BXD-specific references (GRCm38 modified for each BXD line with GeneNetwork genotypes and imputed variants) compared to GRCm38 on BXD samples with exact matches.
+
 
 ## Figure 4: Consequences of mapping reference at local eQTL level.
 
@@ -352,7 +354,7 @@ plotVennSimilarat5percent <- function(tissue, condition){
   venn.plot <- venn.diagram(
     x=list(marker=samemarker, slope=similarslope, qvalue=similarqvalue),
     filename=NULL,
-    main=paste0("local eQTL in ", tissue, " ", condition, " (similar at 5%)"),
+    main=paste0(tissue, " ", condition),
     fontfamily="sans",
     main.fontfamily="sans",
     cex=0.8,
@@ -408,9 +410,9 @@ mtext(LETTERS[1:3], side=3, line=-3, adj=c(0,0.52,0), padj=c(0,0,11.5), cex=1.5,
 
 __Figure 4 | Consequences of mapping reference at local eQTL level.__
 
-A) Percentage of significant (FDR 5%) local eQTLs with GRCm38 or BXD-specific references.
-B) Percentage of skewness of significant(FDR 5%) local eQTLs slope with GRCm38 or BXD-specific references.
-C) Local eQTLs overlapping between GRCm38 and BXD-specific references in cortex NSD (left) or in liver NSD (right). The sign of the slope measures the direction of gene expression (B6 or D2 as more expressed allele).
+A) Percentage of significant (FDR 5%) local eQTLs over all expressed genes with GRCm38 or BXD-specific references.
+B) Percentage of skewness of significant (FDR 5%) local eQTLs slope over all expressed genes with GRCm38 or BXD specific references.
+C) For all expressed genes, the best local genetic marker to explain gene expression is selected. The Venn diagrams represent the overlap of this analysis between GRCm38 and BXD specific references for the three criteria in cortex NSD (left) or in the liver NSD (right). The marker (in green) indicates changing the reference result in the same genetic marker associated with gene expression. The slope (in blue) is the direction and strength of allele-specific gene expression, it is considered to be overlapping between the references if it varies less than 5%. The qvalue (in pink) is the statistical significance of the marker to gene expression association, it is considered to be overlapping between the references if it varies less than 5%.
 
 
 ## Figure 5: Evaluating mapping parameters.
@@ -490,7 +492,7 @@ points(x=rep(x[2], nrow(splitedlabels_Cortex)), y=y, pch=22, bg=splitedlabels_Co
 points(x=rep(x[3], nrow(splitedlabels_Cortex)), y=y, pch=22, bg=splitedlabels_Cortex[, "Splicing"], col="black", cex=2)
 
 # plot for Cortex
-gap.plot(c(0, 30), c(1, 40), gap=c(from,to), gap.axis="x", type="p", pch=19, main=paste("Cortex", normalizationtype), xlab="significant eQTLs %", ylab="", xlim=c(0,30), yticlab=FALSE, ytics=-1, lty=0, col="white", cex.main=1.5, cex.lab=1.4)
+gap.plot(c(0, 30), c(1, 40), gap=c(from,to), gap.axis="x", type="p", pch=19, main="Cortex", xlab="significant eQTLs %", ylab="", xlim=c(0,30), yticlab=FALSE, ytics=-1, lty=0, col="white", cex.main=1.5, cex.lab=1.4)
 abline(h=1:40, lty=3, col="grey70")
 gap.plot(averageratio_Cortex[order_Cortex]*100, seq(1, length(averageratio_Cortex[order_Cortex]*100)), gap=c(from,to), gap.axis="x", type="p", pch=19, xlab="significant eQTLs (%)", ylab="", xlim=c(0,30), yticlab=FALSE, ytics=-1, add=TRUE)
 axis.break(1, from, breakcol="grey90", style="gap")
@@ -509,7 +511,7 @@ points(x=rep(x[2], nrow(splitedlabels_Liver)), y=y, pch=22, bg=splitedlabels_Liv
 points(x=rep(x[3], nrow(splitedlabels_Liver)), y=y, pch=22, bg=splitedlabels_Liver[, "Splicing"], col="black", cex=2)
 
 # plot for Liver
-gap.plot(c(0, 30), c(1, 40), gap=c(from,to), gap.axis="x", type="p", pch=19, main=paste("Liver", normalizationtype), xlab="significant eQTLs %", ylab="", xlim=c(0,30), yticlab=FALSE, ytics=-1, lty=0, cex.main=1.5, cex.lab=1.4, col="white")
+gap.plot(c(0, 30), c(1, 40), gap=c(from,to), gap.axis="x", type="p", pch=19, main="Liver", xlab="significant eQTLs %", ylab="", xlim=c(0,30), yticlab=FALSE, ytics=-1, lty=0, cex.main=1.5, cex.lab=1.4, col="white")
 abline(h=1:40, lty=3, col="grey70")
 gap.plot(averageratio_Liver[order_Liver]*100, seq(1, length(averageratio_Liver[order_Liver]*100)), gap=c(from,to), gap.axis="x", type="p", pch=19, xlab="significant eQTLs (%)", ylab="", xlim=c(0,30), yticlab=FALSE, ytics=-1, add=TRUE)
 axis.break(1, from, breakcol="grey90", style="gap")
@@ -520,8 +522,8 @@ mtext(LETTERS[1:2], side=3, line=0, adj=c(0,0.51), padj=c(1.5,1.5), cex=1.5, out
 
 __Figure 5 | Evaluating mapping parameters.__
 
-A) The performance on local eQTLs of selected mapping settings on cortex samples (average between NSD and SD conditions) is measured by the percentage of expressed genes than have a significant local eQTLs.
-B) The performance on local eQTLs of selected mapping settings on liver samples (average between NSD and SD conditions) is measured by the percentage of expressed genes than have a significant local eQTLs.
+A) The performance on local eQTLs of selected mapping settings on cortex samples (average of the NSD and SD conditions) is measured by the percentage of expressed genes that have a significant local eQTL. The BXD specific references were used.
+B) As in A but for liver samples.
 
 
 <!-- # R session info -->

@@ -78,14 +78,14 @@ Convert geneID into gene names, remove duplicate gene names, keep only gene name
 
 ```{r GeneNames}
 # load D2 geneID to gene name convert table
-D2geneConvert <- read.table("F:/BXD/references/gene_names_D2.tab", header=FALSE, stringsAsFactors=FALSE, sep=" ")
+D2geneConvert <- read.table("F:/BXD/references/gene_names_D2.tab", header=FALSE, stringsAsFactors=FALSE, sep="\t")
 colnames(D2geneConvert) <- c("GeneID", "GeneName")
 # remove replicate gene names
 D2geneConvert <- D2geneConvert[-which(duplicated(D2geneConvert$GeneName)),]
 rownames(D2geneConvert) <- 1:nrow(D2geneConvert)
 ### could be improved by adding the counts from different transcripts
 
-B6mm10geneConvert <- read.table("F:/BXD/references/gene_names_B6mm10.tab", header=FALSE, stringsAsFactors=FALSE, sep=" ")
+B6mm10geneConvert <- read.table("F:/BXD/references/gene_names_B6mm10.tab", header=FALSE, stringsAsFactors=FALSE, sep="\t")
 colnames(B6mm10geneConvert) <- c("GeneID", "GeneName")
 # remove B6 replicate gene names
 B6mm10geneConvert <- B6mm10geneConvert[-which(duplicated(B6mm10geneConvert$GeneName)),]
@@ -271,14 +271,14 @@ palette(c("black", "brown3"))
 
 # plot for Cortex
 plot(1:nrow(DMdata_Cortex), DMdata_Cortex$logFC, las=1, pch=20, col=as.factor(DMdata_Cortex$adj.P.Val<=0.05),
-       main="DM in Cortex", xlab="rank of adjusted p-value", ylab="-logFC")
+       main="DM in Cortex", xlab="rank of adjusted p-value", ylab="logFC")
 
 # plot for Liver
 plot(1:nrow(DMdata_Liver), DMdata_Liver$logFC, las=1, pch=20, col=as.factor(DMdata_Liver$adj.P.Val<=0.05),
-       main="DM in Liver", xlab="rank of adjusted p-value", ylab="-logFC")
+       main="DM in Liver", xlab="rank of adjusted p-value", ylab="logFC")
 ```
 
-The -logFC represents ratio of D2 over B6 (positive values map better on D2, negative values map better on B6).
+The logFC represents ratio of D2 over B6 (positive values map better on D2, negative values map better on B6).
 
 `r round(length(which(DMdata_Cortex$adj.P.Val<=0.05))/length(DMdata_Cortex$adj.P.Val)*100)`% of genes are significantly (below or equal to 0.05) differentially mapped in cortex, and `r round(length(which(DMdata_Liver$adj.P.Val<=0.05))/length(DMdata_Liver$adj.P.Val)*100)`% in liver.
 
