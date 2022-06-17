@@ -3,8 +3,6 @@
 ##author: "Nastassia Gobet"
 ##date: '`r Sys.Date()`'
 output:
-  pdf_document:
-    fig_caption: yes
   html_document:
     code_folding: hide
     df_print: paged
@@ -14,6 +12,8 @@ output:
     theme: readable
     toc: yes
     toc_depth: 4
+  pdf_document:
+    fig_caption: yes
   word_document:
     toc: yes
     toc_depth: '4'
@@ -242,7 +242,7 @@ plotVennSimilarat5percent <- function(tissue, condition){
   venn.plot <- venn.diagram(
     x=list(marker=samemarker, slope=similarslope, qvalue=similarqvalue),
     filename=NULL,
-    main=paste0("local eQTL in ", tissue, " ", condition, " (similar at 5%)"),
+    main=paste0(tissue, " ", condition),
     fontfamily="sans",
     main.fontfamily="sans",
     cex=1,
